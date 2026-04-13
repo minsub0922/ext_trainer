@@ -1,0 +1,236 @@
+[
+  {
+    "id": "entity-relation-sample-001",
+    "text": "Apple Inc. was founded by Steve Jobs in Cupertino, California. Tim Cook serves as the current CEO of Apple.",
+    "lang": "en",
+    "source": "news_corpus",
+    "task_types": ["entity", "relation"],
+    "schema": {
+      "kv": [],
+      "entity": ["ORG", "PERSON", "LOC", "DATE"],
+      "relation": ["founded_by", "located_in", "works_for"]
+    },
+    "answer": {
+      "kv": {},
+      "entity": [
+        {
+          "text": "Apple Inc.",
+          "type": "ORG",
+          "start": 0,
+          "end": 9
+        },
+        {
+          "text": "Steve Jobs",
+          "type": "PERSON",
+          "start": 25,
+          "end": 35
+        },
+        {
+          "text": "Cupertino, California",
+          "type": "LOC",
+          "start": 39,
+          "end": 60
+        },
+        {
+          "text": "Tim Cook",
+          "type": "PERSON",
+          "start": 62,
+          "end": 70
+        }
+      ],
+      "relation": [
+        {
+          "head": "Apple Inc.",
+          "head_type": "ORG",
+          "relation": "founded_by",
+          "tail": "Steve Jobs",
+          "tail_type": "PERSON"
+        },
+        {
+          "head": "Apple Inc.",
+          "head_type": "ORG",
+          "relation": "located_in",
+          "tail": "Cupertino, California",
+          "tail_type": "LOC"
+        },
+        {
+          "head": "Tim Cook",
+          "head_type": "PERSON",
+          "relation": "works_for",
+          "tail": "Apple Inc.",
+          "tail_type": "ORG"
+        }
+      ]
+    },
+    "meta": {
+      "dataset": "news_corpus",
+      "license": "cc-by-4.0",
+      "split": "train",
+      "notes": "Technology news article about Apple"
+    }
+  },
+  {
+    "id": "entity-relation-sample-002",
+    "text": "Elon Musk, the founder of Tesla and SpaceX, announced a new project in Austin, Texas on March 15, 2024. The announcement was made at the Tesla Gigafactory located in Austin.",
+    "lang": "en",
+    "source": "news_corpus",
+    "task_types": ["entity", "relation"],
+    "schema": {
+      "kv": [],
+      "entity": ["ORG", "PERSON", "LOC", "DATE"],
+      "relation": ["founded_by", "located_in", "works_for", "announced_at"]
+    },
+    "answer": {
+      "kv": {},
+      "entity": [
+        {
+          "text": "Elon Musk",
+          "type": "PERSON",
+          "start": 0,
+          "end": 9
+        },
+        {
+          "text": "Tesla",
+          "type": "ORG",
+          "start": 28,
+          "end": 33
+        },
+        {
+          "text": "SpaceX",
+          "type": "ORG",
+          "start": 38,
+          "end": 44
+        },
+        {
+          "text": "Austin, Texas",
+          "type": "LOC",
+          "start": 67,
+          "end": 80
+        },
+        {
+          "text": "March 15, 2024",
+          "type": "DATE",
+          "start": 84,
+          "end": 98
+        },
+        {
+          "text": "Tesla Gigafactory",
+          "type": "ORG",
+          "start": 146,
+          "end": 163
+        }
+      ],
+      "relation": [
+        {
+          "head": "Tesla",
+          "head_type": "ORG",
+          "relation": "founded_by",
+          "tail": "Elon Musk",
+          "tail_type": "PERSON"
+        },
+        {
+          "head": "SpaceX",
+          "head_type": "ORG",
+          "relation": "founded_by",
+          "tail": "Elon Musk",
+          "tail_type": "PERSON"
+        },
+        {
+          "head": "Tesla Gigafactory",
+          "head_type": "ORG",
+          "relation": "located_in",
+          "tail": "Austin, Texas",
+          "tail_type": "LOC"
+        }
+      ]
+    },
+    "meta": {
+      "dataset": "news_corpus",
+      "license": "cc-by-4.0",
+      "split": "train",
+      "notes": "Technology announcement coverage"
+    }
+  },
+  {
+    "id": "entity-relation-sample-003",
+    "text": "Google was established by Larry Page and Sergey Brin in 1998 at Stanford University. The company is headquartered in Mountain View, California.",
+    "lang": "en",
+    "source": "news_corpus",
+    "task_types": ["entity", "relation"],
+    "schema": {
+      "kv": [],
+      "entity": ["ORG", "PERSON", "LOC", "DATE"],
+      "relation": ["founded_by", "located_in", "established_at"]
+    },
+    "answer": {
+      "kv": {},
+      "entity": [
+        {
+          "text": "Google",
+          "type": "ORG",
+          "start": 0,
+          "end": 6
+        },
+        {
+          "text": "Larry Page",
+          "type": "PERSON",
+          "start": 25,
+          "end": 35
+        },
+        {
+          "text": "Sergey Brin",
+          "type": "PERSON",
+          "start": 40,
+          "end": 51
+        },
+        {
+          "text": "1998",
+          "type": "DATE",
+          "start": 55,
+          "end": 59
+        },
+        {
+          "text": "Stanford University",
+          "type": "ORG",
+          "start": 63,
+          "end": 82
+        },
+        {
+          "text": "Mountain View, California",
+          "type": "LOC",
+          "start": 114,
+          "end": 139
+        }
+      ],
+      "relation": [
+        {
+          "head": "Google",
+          "head_type": "ORG",
+          "relation": "founded_by",
+          "tail": "Larry Page",
+          "tail_type": "PERSON"
+        },
+        {
+          "head": "Google",
+          "head_type": "ORG",
+          "relation": "founded_by",
+          "tail": "Sergey Brin",
+          "tail_type": "PERSON"
+        },
+        {
+          "head": "Google",
+          "head_type": "ORG",
+          "relation": "located_in",
+          "tail": "Mountain View, California",
+          "tail_type": "LOC"
+        }
+      ]
+    },
+    "meta": {
+      "dataset": "news_corpus",
+      "license": "cc-by-4.0",
+      "split": "train",
+      "notes": "Historical company information"
+    }
+  }
+]

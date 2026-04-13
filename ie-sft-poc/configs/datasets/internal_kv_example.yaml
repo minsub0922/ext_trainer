@@ -1,0 +1,22 @@
+### Internal K/V Extraction Dataset Template
+### This is a template for internal key-value extraction datasets
+name: internal_kv
+source: internal
+task_types:
+  - kv
+license: internal
+default_enabled: false
+description: "Template for internal K/V extraction datasets with domain-specific fields"
+kv_fields:
+  - company_name
+  - date
+  - amount
+  - category
+  - person_name
+  - location
+notes: |
+  This is a template configuration. To use:
+  1. Copy this file and rename for your specific dataset
+  2. Update 'name', 'source', and 'kv_fields' as needed
+  3. Add actual data to data/raw directory
+  4. Run unify_ie_datasets.py to process

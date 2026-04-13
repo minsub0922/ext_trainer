@@ -1,0 +1,16 @@
+### InstructIE Dataset Configuration
+name: instructie
+source: "HuggingFace:KnowLM/InstructIE"
+task_types:
+  - entity
+  - relation
+license: "CC BY 4.0 (verify before commercial use)"
+default_enabled: true
+description: "InstructIE public dataset for entity and relation extraction tasks"
+stats:
+  total_samples: 21000
+  languages: ["English", "Chinese"]
+split_ratios:
+  train: 0.8
+  dev: 0.1
+  test: 0.1

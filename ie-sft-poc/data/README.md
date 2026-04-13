@@ -1,0 +1,386 @@
+# Data Directory
+
+This directory contains the data pipeline for IE-SFT-PoC: raw datasets, normalized interim formats, processed training data, and metadata registries.
+
+## Directory Structure
+
+```
+data/
+├── raw/                  # Original, unprocessed datasets
+├── interim/              # Normalized canonical format per dataset
+├── processed/            # Merged, split, ready for training
+└── metadata/             # Dataset registries and metadata
+```
+
+## raw/ - Original Datasets
+
+Directory for downloaded, unprocessed datasets in their original formats.
+
+**Important**: Raw data is **excluded from git** via `.gitignore`. Do not commit raw dataset files.
+
+### Subdirectories
+
+- **instructie/** - InstructIE dataset downloaded from HuggingFace
+  - Format: JSONL (original format)
+  - License: Public, permissive
+  - Size: ~80k records (approx)
+  - Files: `train.jsonl`, `validation.jsonl`, `test.jsonl`
+  - Download: `python scripts/download/download_instructie.py`
+
+- **gollie_reference/** - GoLLIE reference schemas (design reference only)
+  - Format: JSON
+  - License: Research reference, not training data
+  - Files: `schemas.json`, `tasks.json`, `metadata.json`
+  - Download: `python scripts/download/download_reference_gollie_assets.py`
+  - Status: Reference only, not used in training by default
+
+- **internal/** - Internal dataset templates (requires authentication)
+  - Access: Separate onboarding procedure
+  - Format: Custom (depends on source)
+  - Files: Vary by dataset type
+  - Download: `python scripts/download/download_internal_template.py`
+
+### Storage Guidelines
+
+- **Keep**: Downloaded datasets remain here for reproducibility
+- **Delete**: If disk space is critical, run:
+  ```bash
+  rm -rf data/raw/instructie/*.jsonl
+  python scripts/download/download_instructie.py  # Re-download later
+  ```
+- **Backup**: Raw data should be backed up separately; it's not in version control
+- **Size**: Instructie + GoLLIE reference = ~5-10 GB (depends on splits)
+
+## interim/ - Normalized Canonical Format
+
+Directory for datasets normalized to the canonical IE schema. These files are generated from raw data via preprocessing scripts.
+
+**Important**: Interim files are **checked into git** (unless very large). They represent the canonical format and enable reproducibility.
+
+### Structure
+
+- **instructie/** - Normalized InstructIE
+  - Format: JSONL (canonical schema)
+  - Files: `train.jsonl`, `validation.jsonl`, `test.jsonl`
+  - Source: `data/raw/instructie/` → `scripts/preprocess/normalize_instructie.py`
+  - Purpose: Single task type per record, full schema validation
+
+- **internal_kv/** - Internal KV extraction template
+  - Format: JSONL (canonical schema)
+  - Files: `train.jsonl`, `dev.jsonl`, `test.jsonl` (split varies)
+  - Source: `data/raw/internal/` → `scripts/preprocess/build_internal_kv_template.py`
+  - Purpose: KV extraction task, structured field-value pairs
+
+- **gollie_reference/** - GoLLIE reference (schema only)
+  - Format: JSONL (canonical schema, reference use)
+  - Files: `entities.jsonl`, `relations.jsonl`, etc.
+  - Purpose: Schema design reference, not for training
+
+### Record Format (Canonical Schema)
+
+All records in interim/ follow this schema:
+
+```json
+{
+  "id": "unique-record-id",
+  "text": "Input text to extract information from",
+  "lang": "en",
+  "source": "instructie",
+  "task_types": ["entity", "relation"],
+  "schema": {
+    "kv": [],
+    "entity": ["ORG", "PERSON", "LOC"],
+    "relation": ["founded_by", "located_in"]
+  },
+  "answer": {
+    "kv": {},
+    "entity": [
+      {
+        "text": "Apple",
+        "type": "ORG",
+        "start": 0,
+        "end": 5
+      }
+    ],
+    "relation": [
+      {
+        "head": "Apple",
+        "head_type": "ORG",
+        "relation": "founded_by",
+        "tail": "Steve Jobs",
+        "tail_type": "PERSON"
+      }
+    ]
+  },
+  "meta": {
+    "dataset": "instructie",
+    "license": "cc-by-4.0",
+    "split": "train",
+    "source_id": "original-record-id"
+  }
+}
+```
+
+### Usage
+
+1. **Generate interim files from raw data**:
+   ```bash
+   python scripts/preprocess/normalize_instructie.py
+   ```
+
+2. **Validate interim files**:
+   ```bash
+   python scripts/preprocess/validate_canonical_dataset.py \
+     --input data/interim/instructie/train.jsonl
+   ```
+
+3. **Merge interim files into unified dataset**:
+   ```bash
+   python scripts/preprocess/unify_ie_datasets.py \
+     --input data/interim/*/*.jsonl \
+     --output data/processed/unified.jsonl
+   ```
+
+4. **Print statistics**:
+   ```bash
+   python scripts/utils/print_dataset_stats.py \
+     --input data/interim/instructie/train.jsonl
+   ```
+
+## processed/ - Ready-for-Training Data
+
+Directory for merged, split, and formatted data ready for model training.
+
+**Important**: Processed files are **checked into git** only if small enough. Large files may be regenerated from interim data.
+
+### Subdirectories
+
+- **unified.jsonl** - All datasets merged into single JSONL file
+  - Generated by: `scripts/preprocess/unify_ie_datasets.py`
+  - Format: JSONL (canonical schema)
+  - Contains: All task types from all datasets combined
+  - Size: ~80-100k records (may vary with added datasets)
+
+- **splits/** - Train/dev/test split files
+  - Generated by: `scripts/export/export_train_dev_test.py`
+  - Files:
+    - `train.jsonl` (default 80% of data)
+    - `dev.jsonl` (default 10%)
+    - `test.jsonl` (default 10%)
+    - `split_info.json` (metadata about splits)
+  - Format: JSONL (canonical schema)
+  - Purpose: Ready for validation and conversion
+
+- **llamafactory/** - LLaMA-Factory training format
+  - Generated by: `scripts/export/export_to_llamafactory.py`
+  - Files:
+    - `train.jsonl` (conversation/message format)
+    - `dev.jsonl` (conversation/message format)
+    - `export_info.json` (metadata)
+  - Format: Conversation format (system/user/assistant roles)
+  - Purpose: Direct input to LLaMA-Factory trainer
+  - Example record:
+    ```json
+    {
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an information extraction expert..."
+        },
+        {
+          "role": "user",
+          "content": "Extract entities and relations from: [TEXT]"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"entity\": [...], \"relation\": [...]}"
+        }
+      ]
+    }
+    ```
+
+### Data Pipeline Flow
+
+```
+raw/instructie/*.jsonl
+         ↓
+   normalize_instructie.py
+         ↓
+interim/instructie/*.jsonl
+         ↓
+   unify_ie_datasets.py
+         ↓
+processed/unified.jsonl
+         ↓
+   export_train_dev_test.py
+         ↓
+processed/splits/{train,dev,test}.jsonl
+         ↓
+   export_to_llamafactory.py
+         ↓
+processed/llamafactory/{train,dev}.jsonl
+         ↓
+   llamafactory-cli train config.yaml
+         ↓
+outputs/{checkpoint}/
+```
+
+### File Sizes (Approximate)
+
+Based on typical InstructIE dataset:
+
+| Directory | File | Size | Count |
+|-----------|------|------|-------|
+| raw | instructie/train.jsonl | 500 MB | 70k records |
+| interim | instructie/train.jsonl | 600 MB | 70k records |
+| processed | unified.jsonl | 600 MB | 70k records |
+| processed/splits | train.jsonl | 480 MB | 56k records |
+| processed/splits | dev.jsonl | 60 MB | 7k records |
+| processed/splits | test.jsonl | 60 MB | 7k records |
+| processed/llamafactory | train.jsonl | 600 MB | 56k records |
+| processed/llamafactory | dev.jsonl | 75 MB | 7k records |
+
+## metadata/ - Dataset Registry and Metadata
+
+Directory for dataset metadata, configurations, and registry files.
+
+### Files
+
+**dataset_registry.yaml** - Central dataset registry and configuration
+- Purpose: Defines all available datasets, sources, and properties
+- Format: YAML
+- Usage: Loaded by preprocessing and training scripts
+- Example:
+  ```yaml
+  datasets:
+    instructie:
+      name: "InstructIE"
+      source: "https://huggingface.co/datasets/..."
+      task_types: [kv, entity, relation]
+      license: "cc-by-4.0"
+      enabled: true
+    gollie_reference:
+      name: "GoLLIE Reference"
+      source: "local"
+      task_types: [entity, relation]
+      license: "research-reference"
+      enabled: false
+  ```
+
+**dataset_registry.example.yaml** - Template for custom registries
+- Purpose: Example showing all possible fields
+- Usage: Copy and customize for your setup
+
+### Adding a New Dataset
+
+1. Add entry to `metadata/dataset_registry.yaml`:
+   ```yaml
+   my_dataset:
+     name: "My Custom Dataset"
+     source: "data/raw/my_dataset/"
+     task_types: [entity, relation]
+     license: "cc-by-4.0"
+     size_approx: 50000
+     enabled: true
+     notes: "Custom internal dataset"
+   ```
+
+2. Create normalization script: `scripts/preprocess/normalize_my_dataset.py`
+
+3. Create dataset config: `configs/datasets/my_dataset.yaml`
+
+4. Document in `docs/dataset_policy.md`
+
+5. Test:
+   ```bash
+   python scripts/preprocess/normalize_my_dataset.py --validate
+   ```
+
+## Ignoring Large Files
+
+The `.gitignore` file in `data/raw/` excludes raw dataset files to avoid bloating the repository:
+
+```gitignore
+# .gitignore in data/raw/
+*.jsonl
+*.json
+*.tar.gz
+*.zip
+!.gitignore
+!README.md
+```
+
+If you want to commit specific processed datasets (e.g., small test sets), explicitly allow them:
+
+```bash
+git add -f data/processed/test_set.jsonl
+```
+
+## Cleaning Up Disk Space
+
+If storage is limited:
+
+```bash
+# Remove raw data (can re-download)
+rm -rf data/raw/instructie/*.jsonl
+
+# Remove interim files (can regenerate)
+rm -rf data/interim/instructie/*.jsonl
+
+# Remove processed files except final training data
+rm data/processed/unified.jsonl
+# Keep data/processed/splits/ and data/processed/llamafactory/
+```
+
+## Validation and Quality Checks
+
+Always validate data at each pipeline stage:
+
+```bash
+# After download
+python scripts/download/download_instructie.py
+
+# After normalization
+python scripts/preprocess/validate_canonical_dataset.py \
+  --input data/interim/instructie/train.jsonl
+
+# After merging
+python scripts/preprocess/validate_canonical_dataset.py \
+  --input data/processed/unified.jsonl --strict
+
+# After splitting
+python scripts/preprocess/validate_canonical_dataset.py \
+  --input data/processed/splits/train.jsonl \
+  --sample 1000  # Quick validation on sample
+```
+
+## Storage and Backup Recommendations
+
+**Local Development:**
+- Raw data: ~10-20 GB (can be deleted, re-downloaded)
+- Interim data: ~15-20 GB (can be regenerated)
+- Processed data: ~2-3 GB (keep for training reproducibility)
+- **Total**: ~30 GB minimum
+
+**Production/Cloud:**
+- Store raw data in object storage (S3, GCS)
+- Store interim data for reproducibility
+- Keep latest checkpoint in processed/
+- Archive old checkpoints
+
+**Backup Strategy:**
+1. Version control: interim/, metadata/, configs/ (lightweight)
+2. Object storage: raw/ (for reproducibility)
+3. Checkpoint storage: Separate, long-term archive
+
+## References
+
+- **Canonical Schema**: See `docs/canonical_schema.md`
+- **Dataset Policy**: See `docs/dataset_policy.md`
+- **Download Scripts**: See `scripts/README.md`
+- **Preprocessing**: See `scripts/README.md`
+
+---
+
+**Last Updated**: April 2026  
+**Storage Version**: 1.0

@@ -1,0 +1,194 @@
+[
+  {
+    "id": "unified-sample-001",
+    "text": "Invoice #INV-2024-001 issued by TechCorp Inc. on March 10, 2024. Customer: John Smith from New York. Items: Laptop $1,200, Software License $500. Total: $1,700. Status: Paid.",
+    "lang": "en",
+    "source": "mixed_task_dataset",
+    "task_types": ["kv", "entity", "relation"],
+    "schema": {
+      "kv": ["invoice_number", "company_name", "issue_date", "customer_name", "customer_location", "total_amount", "status"],
+      "entity": ["ORG", "PERSON", "LOC", "DATE", "PRODUCT", "MONEY"],
+      "relation": ["issued_by", "located_in", "customer_of"]
+    },
+    "answer": {
+      "kv": {
+        "invoice_number": "INV-2024-001",
+        "company_name": "TechCorp Inc.",
+        "issue_date": "March 10, 2024",
+        "customer_name": "John Smith",
+        "customer_location": "New York",
+        "total_amount": "$1,700",
+        "status": "Paid"
+      },
+      "entity": [
+        {
+          "text": "INV-2024-001",
+          "type": "PRODUCT",
+          "start": 8,
+          "end": 20
+        },
+        {
+          "text": "TechCorp Inc.",
+          "type": "ORG",
+          "start": 31,
+          "end": 44
+        },
+        {
+          "text": "March 10, 2024",
+          "type": "DATE",
+          "start": 48,
+          "end": 62
+        },
+        {
+          "text": "John Smith",
+          "type": "PERSON",
+          "start": 74,
+          "end": 84
+        },
+        {
+          "text": "New York",
+          "type": "LOC",
+          "start": 90,
+          "end": 98
+        },
+        {
+          "text": "$1,200",
+          "type": "MONEY",
+          "start": 112,
+          "end": 118
+        },
+        {
+          "text": "$500",
+          "type": "MONEY",
+          "start": 137,
+          "end": 141
+        },
+        {
+          "text": "$1,700",
+          "type": "MONEY",
+          "start": 152,
+          "end": 158
+        }
+      ],
+      "relation": [
+        {
+          "head": "INV-2024-001",
+          "head_type": "PRODUCT",
+          "relation": "issued_by",
+          "tail": "TechCorp Inc.",
+          "tail_type": "ORG"
+        },
+        {
+          "head": "John Smith",
+          "head_type": "PERSON",
+          "relation": "located_in",
+          "tail": "New York",
+          "tail_type": "LOC"
+        },
+        {
+          "head": "John Smith",
+          "head_type": "PERSON",
+          "relation": "customer_of",
+          "tail": "TechCorp Inc.",
+          "tail_type": "ORG"
+        }
+      ]
+    },
+    "meta": {
+      "dataset": "mixed_task_dataset",
+      "license": "internal",
+      "split": "train",
+      "notes": "Multi-task example combining KV, entity, and relation extraction"
+    }
+  },
+  {
+    "id": "unified-sample-002",
+    "text": "Press Release: Samsung Electronics announces new partnership with Google LLC effective April 1, 2024. The deal was signed in Seoul, South Korea by CEO Kim Jae-yong. Expected investment: $500 million over 3 years.",
+    "lang": "en",
+    "source": "mixed_task_dataset",
+    "task_types": ["kv", "entity", "relation"],
+    "schema": {
+      "kv": ["company_a", "company_b", "announcement_date", "effective_date", "location", "ceo_name", "investment_amount"],
+      "entity": ["ORG", "PERSON", "LOC", "DATE", "MONEY"],
+      "relation": ["partnered_with", "located_in", "signed_by", "announces"]
+    },
+    "answer": {
+      "kv": {
+        "company_a": "Samsung Electronics",
+        "company_b": "Google LLC",
+        "announcement_date": "not_specified",
+        "effective_date": "April 1, 2024",
+        "location": "Seoul, South Korea",
+        "ceo_name": "Kim Jae-yong",
+        "investment_amount": "$500 million"
+      },
+      "entity": [
+        {
+          "text": "Samsung Electronics",
+          "type": "ORG",
+          "start": 14,
+          "end": 32
+        },
+        {
+          "text": "Google LLC",
+          "type": "ORG",
+          "start": 54,
+          "end": 64
+        },
+        {
+          "text": "April 1, 2024",
+          "type": "DATE",
+          "start": 76,
+          "end": 89
+        },
+        {
+          "text": "Seoul, South Korea",
+          "type": "LOC",
+          "start": 120,
+          "end": 138
+        },
+        {
+          "text": "Kim Jae-yong",
+          "type": "PERSON",
+          "start": 142,
+          "end": 154
+        },
+        {
+          "text": "$500 million",
+          "type": "MONEY",
+          "start": 171,
+          "end": 183
+        }
+      ],
+      "relation": [
+        {
+          "head": "Samsung Electronics",
+          "head_type": "ORG",
+          "relation": "partnered_with",
+          "tail": "Google LLC",
+          "tail_type": "ORG"
+        },
+        {
+          "head": "Samsung Electronics",
+          "head_type": "ORG",
+          "relation": "located_in",
+          "tail": "Seoul, South Korea",
+          "tail_type": "LOC"
+        },
+        {
+          "head": "Kim Jae-yong",
+          "head_type": "PERSON",
+          "relation": "signed_by",
+          "tail": "Samsung Electronics",
+          "tail_type": "ORG"
+        }
+      ]
+    },
+    "meta": {
+      "dataset": "mixed_task_dataset",
+      "license": "internal",
+      "split": "train",
+      "notes": "Multi-task example with corporate announcement"
+    }
+  }
+]

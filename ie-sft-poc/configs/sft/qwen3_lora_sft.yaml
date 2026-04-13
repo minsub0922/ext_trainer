@@ -1,0 +1,56 @@
+### Qwen3 0.6B LoRA SFT Training Configuration
+### LLaMA-Factory compatible SFT config for IE task instruction tuning
+
+# Model Configuration
+model_name_or_path: Qwen/Qwen3-0.6B
+template: qwen
+
+# Training Method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+
+# Dataset Configuration
+dataset: ie_sft_unified
+dataset_dir: data/processed/llamafactory
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+# Output Configuration
+output_dir: outputs/qwen3-0.6b-ie-lora
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+# Training Hyperparameters
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 4
+learning_rate: 2.0e-4
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+
+# Precision
+bf16: true
+fp16: false
+
+# Evaluation
+eval_strategy: steps
+eval_steps: 500
+
+# Other
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard
+
+# Notes
+# - Suitable for V100/A100 GPUs with 16GB+ memory
+# - Training time: ~4-6 hours on single GPU
+# - Validation loss should stabilize around epoch 2-3

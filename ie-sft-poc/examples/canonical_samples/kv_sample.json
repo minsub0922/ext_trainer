@@ -1,0 +1,88 @@
+[
+  {
+    "id": "kv-sample-001",
+    "text": "주식회사 한국테크 | 사업자등록번호: 123-45-67890 | 발행일: 2024-03-15 | 공급가액: 1,500,000원",
+    "lang": "ko",
+    "source": "internal_kv_template",
+    "task_types": ["kv"],
+    "schema": {
+      "kv": ["company_name", "business_number", "issue_date", "amount"],
+      "entity": [],
+      "relation": []
+    },
+    "answer": {
+      "kv": {
+        "company_name": "주식회사 한국테크",
+        "business_number": "123-45-67890",
+        "issue_date": "2024-03-15",
+        "amount": "1,500,000원"
+      },
+      "entity": [],
+      "relation": []
+    },
+    "meta": {
+      "dataset": "internal_kv",
+      "license": "internal",
+      "split": "train",
+      "notes": "KV extraction sample - Korean invoice style"
+    }
+  },
+  {
+    "id": "kv-sample-002",
+    "text": "상품명: 프리미엄 무선 이어폰 | SKU: PW-2024-001 | 가격: 299,000원 | 재고: 45개 | 제조사: 소니코리아",
+    "lang": "ko",
+    "source": "internal_kv_template",
+    "task_types": ["kv"],
+    "schema": {
+      "kv": ["product_name", "sku", "price", "stock_quantity", "manufacturer"],
+      "entity": [],
+      "relation": []
+    },
+    "answer": {
+      "kv": {
+        "product_name": "프리미엄 무선 이어폰",
+        "sku": "PW-2024-001",
+        "price": "299,000원",
+        "stock_quantity": "45개",
+        "manufacturer": "소니코리아"
+      },
+      "entity": [],
+      "relation": []
+    },
+    "meta": {
+      "dataset": "internal_kv",
+      "license": "internal",
+      "split": "train",
+      "notes": "KV extraction sample - Product information"
+    }
+  },
+  {
+    "id": "kv-sample-003",
+    "text": "주문번호: ORD-2024-567890 | 주문일시: 2024-03-14 14:30:45 | 배송지: 서울시 강남구 | 배송료: 무료 | 결제상태: 완료",
+    "lang": "ko",
+    "source": "internal_kv_template",
+    "task_types": ["kv"],
+    "schema": {
+      "kv": ["order_id", "order_datetime", "delivery_address", "shipping_fee", "payment_status"],
+      "entity": [],
+      "relation": []
+    },
+    "answer": {
+      "kv": {
+        "order_id": "ORD-2024-567890",
+        "order_datetime": "2024-03-14 14:30:45",
+        "delivery_address": "서울시 강남구",
+        "shipping_fee": "무료",
+        "payment_status": "완료"
+      },
+      "entity": [],
+      "relation": []
+    },
+    "meta": {
+      "dataset": "internal_kv",
+      "license": "internal",
+      "split": "train",
+      "notes": "KV extraction sample - Order information"
+    }
+  }
+]

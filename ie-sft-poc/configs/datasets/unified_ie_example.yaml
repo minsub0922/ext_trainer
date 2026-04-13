@@ -1,0 +1,26 @@
+### Unified IE Dataset Configuration
+### This represents a merged dataset combining multiple IE task types
+name: unified_ie
+source: merged
+task_types:
+  - kv
+  - entity
+  - relation
+license: mixed
+default_enabled: true
+description: "Unified IE dataset merged from multiple sources for comprehensive IE training"
+stats:
+  total_samples: 25000
+  split_ratios:
+    train: 0.8
+    dev: 0.1
+    test: 0.1
+sources:
+  - instructie
+  - internal_kv
+notes: |
+  This dataset combines:
+  - InstructIE for entity and relation extraction
+  - Internal K/V datasets for key-value extraction
+
+  Use this for comprehensive IE model training covering all task types.

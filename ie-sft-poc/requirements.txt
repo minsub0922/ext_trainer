@@ -1,0 +1,21 @@
+# Core dependencies
+pydantic>=2.0,<3.0
+pyyaml>=6.0
+
+# Data processing
+datasets>=2.0
+huggingface-hub>=0.20
+
+# Testing
+pytest>=7.0
+pytest-cov>=4.0
+
+# Utilities
+tqdm>=4.60
+
+# Note: Optional dependencies for training
+# Uncomment below if needed:
+# torch>=2.0
+# transformers>=4.40
+# peft>=0.10
+# llamafactory can be installed from: https://github.com/hiyouga/LLaMA-Factory

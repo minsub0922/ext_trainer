@@ -1,0 +1,8 @@
+### Qwen3.5 0.8B Model Configuration
+model_name_or_path: Qwen/Qwen3.5-0.8B
+template: qwen
+family: qwen3
+recommended_batch_size: 4
+default_max_length: 2048
+bf16: true
+notes: "Qwen3.5 0.8B base model for IE SFT - improved over 0.6B variant"

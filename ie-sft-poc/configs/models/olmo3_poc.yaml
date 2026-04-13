@@ -1,0 +1,9 @@
+### OLMo3 POC Model Configuration
+### NOTE: This uses a placeholder path - update for actual OLMo3 1B model
+model_name_or_path: allenai/OLMo-2-0325-32B-Instruct
+template: default
+family: olmo3
+recommended_batch_size: 4
+default_max_length: 2048
+bf16: true
+notes: "OLMo3 POC - placeholder path, update when actual model is available. Currently using OLMo-2 instruct for testing."

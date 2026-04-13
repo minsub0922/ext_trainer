@@ -1,0 +1,237 @@
+# Dataset Registry Configuration
+#
+# This file defines which datasets are available for training and their properties.
+# Use this as a template to create your own dataset_registry.yaml
+#
+# Each dataset entry includes:
+#   - name: Unique identifier for the dataset
+#   - source: Data source (HuggingFace, local path, etc.)
+#   - task_types: Which IE tasks this dataset supports
+#   - license: License of the data
+#   - default_enabled: Whether to use this dataset by default
+#   - split_ratios: Train/dev/test split (optional)
+#   - path_or_url: Local path or URL to data (optional)
+#   - notes: Additional information (optional)
+
+datasets:
+  # ============================================================================
+  # Public Datasets
+  # ============================================================================
+
+  - name: instructie
+    display_name: "InstructIE"
+    description: "Chinese Information Extraction dataset from KnowLM"
+    source: "huggingface:KnowLM/InstructIE"
+    task_types:
+      - entity
+      - relation
+    languages:
+      - zh
+    license: "CC-BY-4.0"
+    size: "~200K examples"
+    default_enabled: true
+    split_ratios:
+      train: 0.8
+      dev: 0.1
+      test: 0.1
+    notes: "Large-scale Chinese IE dataset. Requires HuggingFace credentials."
+
+  - name: ace2005
+    display_name: "ACE 2005"
+    description: "English event and entity extraction dataset"
+    source: "restricted"
+    task_types:
+      - entity
+      - relation
+    languages:
+      - en
+    license: "LDC License"
+    size: "~500 documents"
+    default_enabled: false
+    split_ratios:
+      train: 0.5
+      dev: 0.25
+      test: 0.25
+    notes: "Requires registration with LDC. Contact project lead for access."
+
+  - name: tacl2020
+    display_name: "TACL 2020 Benchmark"
+    description: "Multi-domain English NER dataset"
+    source: "huggingface:DynaBench/TACL-2020"
+    task_types:
+      - entity
+    languages:
+      - en
+    license: "CC-BY-4.0"
+    size: "~75K examples"
+    default_enabled: false
+    notes: "Good for evaluating cross-domain transfer."
+
+  # ============================================================================
+  # Internal Datasets
+  # ============================================================================
+
+  - name: internal_kv
+    display_name: "Internal KV Template"
+    description: "Internal Korean key-value extraction dataset from business documents"
+    source: "local"
+    task_types:
+      - kv
+    languages:
+      - ko
+    license: "Internal"
+    size: "~5K examples"
+    default_enabled: false
+    split_ratios:
+      train: 0.8
+      dev: 0.1
+      test: 0.1
+    path_or_url: "data/raw/internal_kv/"
+    notes: "Contains invoice, receipt, and business document extractions. Internal use only."
+
+  - name: internal_news_ner
+    display_name: "Internal News NER"
+    description: "Internal English NER dataset from news articles"
+    source: "local"
+    task_types:
+      - entity
+      - relation
+    languages:
+      - en
+    license: "Internal"
+    size: "~3K documents"
+    default_enabled: false
+    split_ratios:
+      train: 0.7
+      dev: 0.15
+      test: 0.15
+    path_or_url: "data/raw/internal_news_ner/"
+    notes: "Curated from public news sources. Entity types: PERSON, ORG, LOC, DATE"
+
+  - name: internal_mixed
+    display_name: "Internal Mixed Tasks"
+    description: "Internal dataset combining KV, entity, and relation extraction"
+    source: "local"
+    task_types:
+      - kv
+      - entity
+      - relation
+    languages:
+      - en
+      - ko
+    license: "Internal"
+    size: "~2K examples"
+    default_enabled: false
+    split_ratios:
+      train: 0.8
+      dev: 0.1
+      test: 0.1
+    path_or_url: "data/raw/internal_mixed/"
+    notes: "Multi-task and multi-lingual dataset for comprehensive evaluation."
+
+  # ============================================================================
+  # Example Datasets (for testing and development)
+  # ============================================================================
+
+  - name: examples_kv
+    display_name: "Example KV Dataset"
+    description: "Small example dataset for KV extraction"
+    source: "local"
+    task_types:
+      - kv
+    languages:
+      - ko
+    license: "Internal"
+    size: "3 examples"
+    default_enabled: false
+    path_or_url: "examples/canonical_samples/kv_sample.json"
+    notes: "For testing and documentation only. Not suitable for training."
+
+  - name: examples_entity_relation
+    display_name: "Example Entity & Relation Dataset"
+    description: "Small example dataset for NER and relation extraction"
+    source: "local"
+    task_types:
+      - entity
+      - relation
+    languages:
+      - en
+    license: "Internal"
+    size: "3 examples"
+    default_enabled: false
+    path_or_url: "examples/canonical_samples/entity_relation_sample.json"
+    notes: "For testing and documentation only. Not suitable for training."
+
+  - name: examples_unified
+    display_name: "Example Unified Tasks Dataset"
+    description: "Small example dataset for multi-task extraction"
+    source: "local"
+    task_types:
+      - kv
+      - entity
+      - relation
+    languages:
+      - en
+    license: "Internal"
+    size: "2 examples"
+    default_enabled: false
+    path_or_url: "examples/canonical_samples/unified_sample.json"
+    notes: "For testing and documentation only. Not suitable for training."
+
+# ============================================================================
+# Global Configuration
+# ============================================================================
+
+global_config:
+  # Default data directory for local datasets
+  data_root: "data/raw"
+
+  # Default validation rules
+  validation:
+    check_text_not_empty: true
+    check_lang_code_valid: true
+    check_task_types_valid: true
+    check_answer_consistency: true
+
+  # Preprocessing options
+  preprocessing:
+    normalize_whitespace: true
+    remove_non_printable: true
+    lowercase_on_demand: false
+
+  # Default split names
+  split_names:
+    - train
+    - dev
+    - test
+    - validation  # Alternative name for dev
+
+  # Cache settings
+  cache:
+    enabled: true
+    directory: "data/cache"
+    ttl_hours: 24
+
+# ============================================================================
+# Usage Instructions
+# ============================================================================
+
+# To enable/disable datasets, change the 'default_enabled' flag:
+#   default_enabled: true  → Included in training by default
+#   default_enabled: false → Must be explicitly selected
+
+# To add a new dataset:
+# 1. Create a new entry below with all required fields
+# 2. Validate the dataset using: validate_canonical_dataset.py
+# 3. Update this file and commit
+
+# To use specific datasets in training:
+#   1. Copy this file to dataset_registry.yaml
+#   2. Edit 'default_enabled' flags for desired datasets
+#   3. Pass to training config: dataset_registry: dataset_registry.yaml
+
+# For dataset sources:
+#   - huggingface:REPO_ID → Load from HuggingFace Hub
+#   - local → Load from local path_or_url
+#   - restricted → Manual download required
+#   - url → Load from direct URL
