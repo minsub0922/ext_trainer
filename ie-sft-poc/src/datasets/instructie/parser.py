@@ -40,32 +40,74 @@ def parse_instructie_record(raw: dict) -> dict:
         ValueError: If record is missing required fields.
     """
     try:
-        # Extract required fields
-        record_id = raw.get("id")
-        text = raw.get("text", "")
-        category = raw.get("cate", "")
-        relations = raw.get("relation", [])
+        # Extract required fields. InstructIE has multiple release schemas:
+        #   - v1 (KnowLM release): {id, cate, text, relation: [...]}
+        #   - v2 / IEPILE:         {id, cate, input, kg: [...]} or
+        #                          {id, cate, input, output: [...]}
+        # Accept the common aliases so both formats work.
+        record_id = raw.get("id") or raw.get("idx") or raw.get("_id")
+        text = (
+            raw.get("text")
+            or raw.get("input")
+            or raw.get("sentence")
+            or raw.get("content")
+            or ""
+        )
+        category = raw.get("cate") or raw.get("category") or raw.get("schema") or ""
+        relations = (
+            raw.get("relation")
+            or raw.get("relations")
+            or raw.get("kg")
+            or raw.get("output")
+            or []
+        )
+        # `output` in some variants is a JSON string, not a list.
+        if isinstance(relations, str):
+            try:
+                relations = json.loads(relations)
+            except json.JSONDecodeError:
+                relations = []
 
         if not record_id:
             raise ValueError("Record missing 'id' field")
 
-        if not text or not text.strip():
+        if not isinstance(text, str) or not text.strip():
             raise ValueError(f"Record {record_id}: text is empty")
 
         # Extract entities from relations
         entities = {}  # Maps entity text to type
         relation_list = []
 
+        def _extract_entity(value: Any, type_value: Any) -> tuple[str, str]:
+            """Return (surface, type) accepting str or nested dict variants."""
+            if isinstance(value, dict):
+                surface = (
+                    value.get("name")
+                    or value.get("text")
+                    or value.get("mention")
+                    or ""
+                )
+                etype = value.get("type") or type_value or ""
+            else:
+                surface = value or ""
+                etype = type_value or ""
+            return str(surface).strip(), str(etype).strip()
+
         for rel in relations:
             if not isinstance(rel, dict):
                 logger.warning(f"Record {record_id}: relation is not a dict, skipping")
                 continue
 
-            head = rel.get("head", "").strip()
-            head_type = rel.get("head_type", "").strip()
-            relation_type = rel.get("relation", "").strip()
-            tail = rel.get("tail", "").strip()
-            tail_type = rel.get("tail_type", "").strip()
+            head_raw = rel.get("head", rel.get("subject", ""))
+            tail_raw = rel.get("tail", rel.get("object", ""))
+            head, head_type = _extract_entity(head_raw, rel.get("head_type", ""))
+            tail, tail_type = _extract_entity(tail_raw, rel.get("tail_type", ""))
+            relation_type = str(
+                rel.get("relation")
+                or rel.get("predicate")
+                or rel.get("relation_type")
+                or ""
+            ).strip()
 
             # Validate relation fields
             if not all([head, head_type, relation_type, tail, tail_type]):
