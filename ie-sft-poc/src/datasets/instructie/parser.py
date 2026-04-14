@@ -45,7 +45,13 @@ def parse_instructie_record(raw: dict) -> dict:
         #   - v2 / IEPILE:         {id, cate, input, kg: [...]} or
         #                          {id, cate, input, output: [...]}
         # Accept the common aliases so both formats work.
-        record_id = raw.get("id") or raw.get("idx") or raw.get("_id")
+        # `or` would short-circuit on the integer 0, so probe each key
+        # explicitly to keep id=0 valid.
+        record_id = None
+        for _k in ("id", "idx", "_id"):
+            if _k in raw and raw[_k] is not None and raw[_k] != "":
+                record_id = raw[_k]
+                break
         text = (
             raw.get("text")
             or raw.get("input")
@@ -68,8 +74,10 @@ def parse_instructie_record(raw: dict) -> dict:
             except json.JSONDecodeError:
                 relations = []
 
-        if not record_id:
+        # Accept integer 0 as a valid id — only None / "" / missing are errors.
+        if record_id is None or record_id == "":
             raise ValueError("Record missing 'id' field")
+        record_id = str(record_id)
 
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"Record {record_id}: text is empty")
@@ -109,18 +117,26 @@ def parse_instructie_record(raw: dict) -> dict:
                 or ""
             ).strip()
 
-            # Validate relation fields
-            if not all([head, head_type, relation_type, tail, tail_type]):
+            # Some InstructIE splits (e.g. the Chinese split) omit entity
+            # types entirely — only head / relation / tail are provided.
+            # Accept those by defaulting the type to "ENTITY", and only
+            # require the three surface fields to be non-empty.
+            if not all([head, relation_type, tail]):
                 logger.debug(
                     f"Record {record_id}: skipping incomplete relation "
                     f"({head}, {head_type}, {relation_type}, {tail}, {tail_type})"
                 )
                 continue
+            if not head_type:
+                head_type = "ENTITY"
+            if not tail_type:
+                tail_type = "ENTITY"
 
-            # Track entities
-            if head not in entities:
+            # Track entities (keep first-seen type; prefer a specific type
+            # over the placeholder "ENTITY" if we learn it later).
+            if head not in entities or entities[head] == "ENTITY":
                 entities[head] = head_type
-            if tail not in entities:
+            if tail not in entities or entities[tail] == "ENTITY":
                 entities[tail] = tail_type
 
             # Add relation
