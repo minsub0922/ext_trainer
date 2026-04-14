@@ -236,8 +236,8 @@ def main() -> int:
     parser.add_argument(
         "--dataset-name",
         type=str,
-        default="ie_dataset",
-        help="Name for dataset in registry (default: ie_dataset)",
+        default="ie_sft_unified",
+        help="Name for dataset in registry (default: ie_sft_unified)",
     )
 
     parser.add_argument(

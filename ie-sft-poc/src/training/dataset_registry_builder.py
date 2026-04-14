@@ -79,60 +79,48 @@ def build_dataset_info(
 
     logger.info(f"Building dataset info for '{dataset_name}'")
 
-    # Standard column mapping for LLaMA-Factory
-    # Maps our canonical field names to LLaMA-Factory expected names
+    # LLaMA-Factory column mapping for alpaca-style records.
     standard_columns = {
-        "prompt": "instruction",  # System prompt/instruction
-        "query": "input",  # Input text
-        "response": "output",  # Expected output/answer
+        "prompt": "instruction",
+        "query": "input",
+        "response": "output",
     }
 
-    # Build entries for each file
-    entries = {}
+    # LLaMA-Factory expects a FLAT dataset_info.json:
+    #   {
+    #     "<name>":      {"file_name": "train.jsonl", "columns": {...}},
+    #     "<name>_dev":  {"file_name": "dev.jsonl",   "columns": {...}},
+    #     "<name>_test": {"file_name": "test.jsonl",  "columns": {...}}
+    #   }
+    # The bare `<name>` key is what the YAML's `dataset:` field references.
+    registry: dict[str, Any] = {}
 
     for file_name in file_names:
-        # Determine split name from filename
-        if "train" in file_name.lower():
-            split_name = f"{dataset_name}_train"
-        elif "dev" in file_name.lower() or "validation" in file_name.lower():
-            split_name = f"{dataset_name}_dev"
-        elif "test" in file_name.lower():
-            split_name = f"{dataset_name}_test"
+        fname_low = file_name.lower()
+        if "train" in fname_low:
+            key = dataset_name  # bare name = train split (YAML default)
+        elif "dev" in fname_low or "validation" in fname_low:
+            key = f"{dataset_name}_dev"
+        elif "test" in fname_low:
+            key = f"{dataset_name}_test"
         else:
-            split_name = f"{dataset_name}_{file_name.replace('.jsonl', '')}"
+            key = f"{dataset_name}_{Path(file_name).stem}"
 
-        entry_dict = {"file_name": file_name, "columns": standard_columns}
+        entry: dict[str, Any] = {
+            "file_name": file_name,
+            "columns": dict(standard_columns),
+        }
 
-        # Compute SHA1 if requested
         if compute_sha1 and output_dir:
             output_path = Path(output_dir) / file_name
             if output_path.exists():
-                sha1 = compute_file_sha1(output_path)
-                entry_dict["file_sha1"] = sha1
-                logger.debug(f"  {split_name}: SHA1={sha1}")
+                entry["file_sha1"] = compute_file_sha1(output_path)
             else:
-                logger.warning(f"File not found for SHA1 computation: {output_path}")
+                logger.warning(f"file not found for sha1: {output_path}")
 
-        entries[split_name] = entry_dict
+        registry[key] = entry
 
-    registry = {
-        dataset_name: {
-            "hf_hub_url": "",
-            "ms_hub_url": "",
-            "script_url": "",
-            "file_sha1": {},
-        },
-    }
-
-    # Flatten entries and collect SHA1s
-    for split_name, entry_dict in entries.items():
-        sha1 = entry_dict.pop("file_sha1", None)
-        registry[dataset_name][split_name] = entry_dict
-        if sha1:
-            registry[dataset_name]["file_sha1"][split_name] = sha1
-
-    logger.info(f"Built registry with {len(entries)} entries")
-
+    logger.info(f"built flat registry with {len(registry)} entries: {list(registry)}")
     return registry
 
 
