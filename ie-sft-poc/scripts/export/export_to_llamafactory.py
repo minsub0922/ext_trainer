@@ -51,8 +51,10 @@ def build_llamafactory_record(
     # Build input (text + task-specific context)
     input_text = f"Text:\n{record.text}"
 
-    # Build output (answer as strict JSON)
-    answer_dict = record.answer.to_canonical_dict()
+    # Build output (answer as strict JSON). Answer is a plain pydantic
+    # BaseModel (only CanonicalIERecord defines to_canonical_dict), so
+    # use model_dump directly.
+    answer_dict = record.answer.model_dump(exclude_none=False)
 
     # Filter answer based on prompt mode
     if prompt_mode == "kv":
