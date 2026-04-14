@@ -44,8 +44,14 @@ ie-sft-poc/
 │   │   ├── unified_ie_example.yaml
 │   │   └── internal_kv_example.yaml
 │   └── sft/                            # LLaMA-Factory training configs
-│       ├── qwen3_lora_sft.yaml
+│       ├── qwen3_lora_sft.yaml         # LoRA (single-GPU friendly)
 │       ├── qwen3_5_lora_sft.yaml
+│       ├── qwen3_full_sft_ds.yaml      # Full SFT + DeepSpeed ZeRO-2
+│       ├── qwen3_5_full_sft_ds.yaml
+│       ├── deepspeed_z2.json           # ZeRO-2 base
+│       ├── deepspeed_z3.json           # ZeRO-3 (for OOM at Z2)
+│       ├── deepspeed_z2_h100.json      # Hopper-tuned ZeRO-2
+│       ├── h100_overrides.yaml         # H100 knobs (fa2, tf32, FP8 opt-in)
 │       └── olmo3_poc_sft.yaml
 │
 ├── data/                               # Data directory
@@ -98,14 +104,25 @@ ie-sft-poc/
 │   ├── export/                         # Export to training format
 │   │   ├── export_train_dev_test.py    # Create splits
 │   │   └── export_to_llamafactory.py   # Export for LLaMA-Factory
-│   ├── train/                          # Training and inference scripts
-│   │   ├── run_sft_qwen3.sh            # Qwen3-0.6B training
-│   │   ├── run_sft_qwen35.sh           # Qwen3.5-0.8B training
+│   ├── train/                          # Training scripts
+│   │   ├── run_sft_qwen3.sh            # Qwen3-0.6B LoRA (single-GPU)
+│   │   ├── run_sft_qwen35.sh           # Qwen3.5-0.8B LoRA (single-GPU)
+│   │   ├── run_sft_qwen3_multigpu.sh   # torchrun + DeepSpeed launcher
+│   │   ├── run_sft_qwen35_multigpu.sh
 │   │   ├── run_sft_olmo3_poc.sh        # OLMo3 training (PoC)
-│   │   ├── run_eval_qwen3.sh           # Evaluation script
-│   │   ├── run_infer_qwen3.sh          # Inference/generation script
-│   │   ├── merge_lora_qwen3.sh         # Merge LoRA weights into model
-│   │   └── trainer_config_template.yaml # Template for custom configs
+│   │   ├── run_eval_qwen3.sh           # (legacy LLaMA-Factory eval)
+│   │   ├── run_infer_qwen3.sh          # Inference/generation
+│   │   └── merge_lora_qwen3.sh         # Merge LoRA weights into base
+│   ├── eval/                           # IE-specific eval matrix
+│   │   ├── run_predict.py              # Batched gen (flash-attn2 + LoRA)
+│   │   ├── compute_metrics.py          # KV/entity/relation F1
+│   │   ├── evaluate_end_to_end.py      # predict + score orchestrator
+│   │   ├── run_eval_scenario.sh        # Dispatcher (--model/--variant/--mode)
+│   │   ├── run_eval_qwen3_lora.sh      # Per-scenario wrappers
+│   │   ├── run_eval_qwen3_full.sh
+│   │   ├── run_eval_qwen35_lora.sh
+│   │   ├── run_eval_qwen35_full.sh
+│   │   └── run_eval_all.sh             # Full matrix sweep
 │   └── utils/                          # Utility functions
 │       ├── env_check.py                # Verify environment setup
 │       └── print_dataset_stats.py      # Dataset statistics
@@ -134,7 +151,8 @@ ie-sft-poc/
 │   │   ├── dataset_registry_builder.py # Build dataset registries
 │   │   ├── llamafactory_runner.py      # Run LLaMA-Factory trainer
 │   │   ├── eval_runner.py              # Run evaluation
-│   │   └── inference_runner.py         # Run inference
+│   │   ├── inference_runner.py         # Run inference
+│   │   └── ie_metrics.py               # IE metrics (KV/entity/relation F1)
 │   ├── olmo3_poc/                      # OLMo3 proof-of-concept
 │   │   ├── __init__.py
 │   │   ├── adapter.py                  # OLMo3 adapter framework
@@ -220,23 +238,64 @@ python scripts/export/export_to_llamafactory.py \
 
 ### 7. Run Training
 
+Single-GPU LoRA (default recipe):
+
 ```bash
-# Train Qwen3-0.6B with LoRA
-bash scripts/train/run_sft_qwen3.sh
-
-# Or train Qwen3.5-0.8B
-bash scripts/train/run_sft_qwen35.sh
-
-# Or train OLMo3 (experimental, when models available)
-bash scripts/train/run_sft_olmo3_poc.sh
+bash scripts/train/run_sft_qwen3.sh     # Qwen3-0.6B   + LoRA
+bash scripts/train/run_sft_qwen35.sh    # Qwen3.5-0.8B + LoRA
+bash scripts/train/run_sft_olmo3_poc.sh # OLMo3 PoC (when models available)
 ```
+
+Multi-GPU full SFT via DeepSpeed (ZeRO-2 by default):
+
+```bash
+# Auto-detects NPROC from nvidia-smi.
+bash scripts/train/run_sft_qwen3_multigpu.sh
+bash scripts/train/run_sft_qwen35_multigpu.sh
+
+# Override: pick a specific config (LoRA + DeepSpeed works too).
+CONFIG=configs/sft/qwen3_full_sft_ds.yaml NPROC=4 \
+  bash scripts/train/run_sft_qwen3_multigpu.sh
+```
+
+H100 / Hopper: every SFT YAML ships `flash_attn: fa2`. For Hopper-tuned
+communication and bigger microbatches, layer `configs/sft/h100_overrides.yaml`
+on top of a base config and switch `deepspeed:` to `deepspeed_z2_h100.json`.
+FP8 via Transformer Engine is opt-in — see comments in `h100_overrides.yaml`.
+
+LoRA vs Full SFT quick reference:
+
+| | LoRA (`*_lora_sft.yaml`) | Full SFT (`*_full_sft_ds.yaml`) |
+|---|---|---|
+| Trainable params | ~0.5–1% (rank-16 adapter) | 100% |
+| GPU memory | fits on 1x 24–40GB | needs 2–8x 80GB w/ DeepSpeed |
+| LR default | `2e-4` | `1e-5` |
+| Checkpoint size | adapter only | full model |
+| Eval `--variant` | `lora` | `full` |
 
 ### 8. Run Evaluation
 
+IE evaluation uses `src/training/ie_metrics.py` to compute KV field PRF1,
+entity (type, text) set F1, and relation triple F1 — not LLaMA-Factory's
+loss/MC accuracy.
+
 ```bash
-# Evaluate the trained model
-bash scripts/train/run_eval_qwen3.sh
+# One scenario (model x variant x mode)
+bash scripts/eval/run_eval_qwen3_lora.sh                     # unified mode
+MODE=kv       bash scripts/eval/run_eval_qwen3_lora.sh
+MODE=entity   bash scripts/eval/run_eval_qwen35_full.sh
+MODE=relation bash scripts/eval/run_eval_qwen35_lora.sh
+
+# Full matrix: {qwen3, qwen3.5} x {lora, full} x {kv, entity, relation, unified}
+# Missing checkpoints are skipped automatically.
+bash scripts/eval/run_eval_all.sh
+
+# Smoke test (first 50 records)
+LIMIT=50 bash scripts/eval/run_eval_qwen3_lora.sh
 ```
+
+Outputs land in `outputs/eval/<tag>-<variant>-<mode>/{test_predictions.jsonl, metrics.json}`.
+See `scripts/eval/README.md` for the full env-var reference.
 
 ### 9. Run Inference
 
@@ -292,11 +351,17 @@ See `docs/dataset_policy.md` for complete licensing information and how to add n
 - **OLMo3 (PoC)**: Future extension currently in proof-of-concept stage
 
 ### Training Infrastructure
-- **LLaMA-Factory Backend**: Efficient SFT with LoRA support
-- **Mixed-Precision Training**: bf16 support for efficient GPU usage
-- **Multi-GPU Support**: Data parallel training on multiple GPUs
-- **Experiment Tracking**: Weights & Biases integration (optional)
-- **Flexible Configuration**: YAML-based config system with CLI overrides
+- **LLaMA-Factory Backend**: Efficient SFT with LoRA and full fine-tuning
+- **DeepSpeed ZeRO-2 / ZeRO-3**: Multi-GPU full SFT out of the box
+- **FlashAttention-2**: Default on all configs (A100/H100/L40S)
+- **H100 (Hopper)**: tuned DeepSpeed profile, tf32, torch.compile, FP8 opt-in
+- **Mixed-Precision**: bf16 on Hopper/Ampere, fp16 fallback for Volta
+- **Experiment Tracking**: TensorBoard by default, W&B optional
+
+### Evaluation
+- **IE-specific metrics**: KV field PRF1, entity set F1, relation triple F1
+- **Scenario matrix**: {qwen3, qwen3.5} × {lora, full} × {kv, entity, relation, unified}
+- **Robust JSON parsing**: code-fence / brace-block fallback with parse-failure tracking
 
 ### Data Pipeline
 - **Download**: Automated dataset acquisition from HuggingFace

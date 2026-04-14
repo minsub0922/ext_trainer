@@ -389,14 +389,46 @@ bash scripts/train/run_sft_qwen3.sh --config configs/sft/custom_qwen3.yaml
 bash scripts/train/run_sft_qwen3.sh --dry-run
 ```
 
-### Multi-GPU Training
+### Multi-GPU Training (DeepSpeed)
+
+For full SFT across multiple GPUs use the DeepSpeed-aware launchers. They
+auto-detect NPROC via `nvidia-smi` and wrap `llamafactory-cli` under
+`torchrun`. The base configs use ZeRO-2; switch `deepspeed:` to
+`deepspeed_z3.json` only if ZeRO-2 OOMs at your chosen batch size.
 
 ```bash
-# Use specific GPUs
-CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train/run_sft_qwen3.sh
+# Qwen3-0.6B full SFT (2-8 GPU recommended)
+bash scripts/train/run_sft_qwen3_multigpu.sh
 
-# Distributed training automatically uses all specified GPUs
+# Qwen3.5-0.8B full SFT
+bash scripts/train/run_sft_qwen35_multigpu.sh
+
+# Override config / NPROC
+CONFIG=configs/sft/qwen3_full_sft_ds.yaml NPROC=4 \
+  bash scripts/train/run_sft_qwen3_multigpu.sh
+
+# Or run LoRA + DDP on a subset of GPUs
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train/run_sft_qwen3.sh
 ```
+
+Effective batch size = `per_device_train_batch_size * gradient_accumulation_steps * N_GPUS`.
+
+### H100 / Hopper
+
+Every SFT YAML ships `flash_attn: fa2` — FlashAttention-2 works on both
+Ampere and Hopper. For Hopper-specific tuning apply
+`configs/sft/h100_overrides.yaml` on top of a base config (tf32,
+`torch.compile`, bigger microbatch) and set:
+
+```yaml
+deepspeed: configs/sft/deepspeed_z2_h100.json   # Hopper-tuned buckets + RR grads
+```
+
+FP8 via NVIDIA Transformer Engine is opt-in — uncomment the `fp8: true`
+block in `h100_overrides.yaml` only if TE is installed and your model has
+TE layer replacements.
+
+See `configs/sft/h100_overrides.yaml` for the full list of knobs.
 
 ### Monitoring Training
 
@@ -497,27 +529,48 @@ eval_steps: 100            # Evaluate every 100 steps
 
 ### Manual Evaluation
 
+For IE-specific scoring (KV PRF1 / entity set F1 / relation triple F1) use
+the scenario matrix under `scripts/eval/`:
+
 ```bash
-# After training, evaluate on test set
-bash scripts/train/run_eval_qwen3.sh \
-  --model-path ./outputs/qwen3-sft-latest/ \
-  --data-path data/processed/llamafactory/test.jsonl
+# Single scenario: {model} x {variant} x {mode}
+bash scripts/eval/run_eval_qwen3_lora.sh                   # mode=unified
+MODE=kv       bash scripts/eval/run_eval_qwen3_lora.sh
+MODE=entity   bash scripts/eval/run_eval_qwen35_full.sh
+MODE=relation bash scripts/eval/run_eval_qwen35_lora.sh
+
+# Full matrix (2 models x 2 variants x 4 modes; skips missing ckpts)
+bash scripts/eval/run_eval_all.sh
 ```
+
+Each scenario writes to `outputs/eval/<tag>-<variant>-<mode>/`:
+
+- `test_predictions.jsonl` — `{id, prompt, prediction, gold}` per row
+- `metrics.json` — per-task PRF1 plus parse-failure counts
+
+Env knobs: `TEST_FILE`, `BATCH_SIZE`, `MAX_NEW`, `LIMIT`, `DTYPE`
+(`bf16` default; use `fp16` on Volta). See `scripts/eval/README.md`.
 
 ### Metrics
 
-**Entity Extraction**:
-- Precision: % of predicted entities that are correct
-- Recall: % of true entities that were found
-- F1: Harmonic mean of precision and recall
+Implemented in `src/training/ie_metrics.py`.
 
-**Relation Extraction**:
-- Exact match: Both entities and relation type must be correct
-- Partial match: Entities correct, relation type may be approximate
+**KV Extraction** — `score_kv`:
+- PRF1 over `(record_idx, field_name)` pairs
+- Exact-match on normalized (lowercase + whitespace-collapsed) value
 
-**KV Extraction**:
-- Accuracy: % of fields correctly extracted
-- Token F1: Token-level overlap with reference
+**Entity Extraction** — `score_entities`:
+- Multiset F1 over `(entity_type, text)` tuples
+- Duplicates count; wrong type = miss
+
+**Relation Extraction** — `score_relations`:
+- Triple F1 on `(head, relation, tail)`
+- `require_types=True` for the stricter typed variant (head/tail types must match too)
+
+**Robustness** — `parse_prediction` strips ```json code fences and falls
+back to the first balanced `{...}` block, so mild generation noise (extra
+prose, trailing tokens) doesn't blow up scoring. Parse failures are
+counted separately in `metrics.json`.
 
 **Overall**:
 - Perplexity: Model confidence on validation set
