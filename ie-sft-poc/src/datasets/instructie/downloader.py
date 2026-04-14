@@ -24,8 +24,28 @@ class InstructIEDownloader(DatasetDownloaderBase):
     Supports downloading English (en) and Chinese (zh) splits.
     """
 
-    HF_REPO = "KnowLM/InstructIE"
+    HF_REPO = "zjunlp/InstructIE"
     AVAILABLE_SUBSETS = ["en", "zh", "all"]
+
+    # The zjunlp/InstructIE repo ships the data as top-level per-language
+    # JSON files (e.g. ``train_en.json``, ``valid_en.json``). Its splits
+    # have non-uniform columns (the validation file uses ``input`` while
+    # train/test use ``text``/``entity``), which makes the standard
+    # ``datasets.load_dataset(..., split="train_en")`` path fail mid-way.
+    # We therefore download the raw files directly via ``hf_hub_download``
+    # and normalize them into JSONL ourselves.
+    #
+    # Layout: (lang, remote_filename, output_filename)
+    # Some older snapshots use ``dev_*`` instead of ``valid_*``, so we
+    # list both and pick whichever resolves successfully.
+    REMOTE_FILES: list[tuple[str, list[str], str]] = [
+        ("en", ["train_en.json"], "train_en.jsonl"),
+        ("en", ["valid_en.json", "dev_en.json"], "dev_en.jsonl"),
+        ("en", ["test_en.json"], "test_en.jsonl"),
+        ("zh", ["train_zh.json"], "train_zh.jsonl"),
+        ("zh", ["valid_zh.json", "dev_zh.json"], "dev_zh.jsonl"),
+        ("zh", ["test_zh.json"], "test_zh.jsonl"),
+    ]
 
     def __init__(self, subset: str = "all") -> None:
         """Initialize the InstructIE downloader.
@@ -52,7 +72,7 @@ class InstructIEDownloader(DatasetDownloaderBase):
         """
         return DatasetMetadata(
             name="instructie",
-            source_url="https://huggingface.co/datasets/KnowLM/InstructIE",
+            source_url="https://huggingface.co/datasets/zjunlp/InstructIE",
             task_types=["entity", "relation"],
             license="placeholder - verify before commercial use",
             default_enabled=True,
@@ -81,81 +101,136 @@ class InstructIEDownloader(DatasetDownloaderBase):
     def download(self, output_dir: Path | str) -> bool:
         """Download the InstructIE dataset from HuggingFace.
 
+        Downloads the raw per-language JSON files from the zjunlp/InstructIE
+        repository directly (via ``huggingface_hub.hf_hub_download``) and
+        converts them into JSONL for downstream processing. This avoids the
+        unreliable split-name auto-detection of ``datasets.load_dataset`` for
+        this particular repo layout.
+
         Args:
             output_dir: Directory where the dataset will be saved.
 
         Returns:
-            True if download was successful, False otherwise.
-
-        Raises:
-            ImportError: If the datasets library is not installed.
-            Exception: For network errors or HuggingFace API issues.
+            True if at least one split was successfully downloaded, else False.
         """
         try:
-            from datasets import load_dataset
+            from huggingface_hub import hf_hub_download
         except ImportError:
             logger.error(
-                "The 'datasets' library is required for downloading InstructIE. "
-                "Install it with: pip install datasets"
+                "The 'huggingface_hub' library is required for downloading "
+                "InstructIE. Install with: pip install huggingface_hub"
             )
             return False
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            logger.info(f"Downloading InstructIE dataset (subset={self.subset})...")
+        # Filter to the requested language subset.
+        if self.subset == "all":
+            files = list(self.REMOTE_FILES)
+        else:
+            files = [f for f in self.REMOTE_FILES if f[0] == self.subset]
 
-            # Determine which splits to download
-            splits_to_download = []
-            if self.subset == "en":
-                splits_to_download = ["train_en", "dev_en", "test_en"]
-            elif self.subset == "zh":
-                splits_to_download = ["train_zh", "dev_zh", "test_zh"]
-            else:  # all
-                splits_to_download = [
-                    "train_en",
-                    "dev_en",
-                    "test_en",
-                    "train_zh",
-                    "dev_zh",
-                    "test_zh",
-                ]
+        logger.info(
+            f"Downloading InstructIE dataset (subset={self.subset}, "
+            f"{len(files)} file(s)) from {self.HF_REPO}..."
+        )
 
-            total_records = 0
-            for split in splits_to_download:
-                logger.info(f"  Downloading split: {split}...")
+        total_records = 0
+        any_success = False
+
+        for lang, candidate_names, out_name in files:
+            logger.info(
+                f"  Fetching {out_name} (lang={lang}, candidates={candidate_names})..."
+            )
+
+            local_path: Path | None = None
+            resolved_name: str | None = None
+            last_error: Exception | None = None
+            for candidate in candidate_names:
                 try:
-                    dataset = load_dataset(self.HF_REPO, split=split)
-                    split_path = output_dir / f"{split}.jsonl"
-
-                    # Save as JSONL
-                    with open(split_path, "w", encoding="utf-8") as f:
-                        for record in dataset:
-                            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-                    records_count = len(dataset)
-                    total_records += records_count
-                    logger.info(f"    Saved {records_count} records to {split_path}")
-
-                except Exception as e:
-                    logger.warning(
-                        f"    Failed to download split {split}: {str(e)}"
+                    p = hf_hub_download(
+                        repo_id=self.HF_REPO,
+                        filename=candidate,
+                        repo_type="dataset",
                     )
+                    local_path = Path(p)
+                    resolved_name = candidate
+                    break
+                except Exception as e:  # 404 or transient error -> try next
+                    last_error = e
                     continue
 
-            # Save metadata
-            self._save_metadata(output_dir)
+            if local_path is None:
+                logger.warning(
+                    f"    Failed to fetch any of {candidate_names}: {last_error}"
+                )
+                continue
 
-            logger.info(
-                f"Download complete. Total records: {total_records} "
-                f"(in {len(splits_to_download)} splits)"
-            )
-            return total_records > 0
+            logger.info(f"    Resolved remote file: {resolved_name}")
 
-        except Exception as e:
-            logger.error(f"Error downloading InstructIE: {str(e)}")
-            return False
+            try:
+                records = self._read_records(local_path)
+            except Exception as e:
+                logger.warning(f"    Failed to parse {resolved_name}: {e}")
+                continue
+
+            # Tag each record with its language for downstream steps.
+            out_path = output_dir / out_name
+            with open(out_path, "w", encoding="utf-8") as f:
+                for rec in records:
+                    if isinstance(rec, dict):
+                        rec.setdefault("lang", lang)
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+            n = len(records)
+            total_records += n
+            any_success = True
+            logger.info(f"    Saved {n} records to {out_path}")
+
+        self._save_metadata(output_dir)
+        logger.info(f"Download complete. Total records: {total_records}")
+        return any_success
+
+    @staticmethod
+    def _read_records(path: Path) -> list:
+        """Read a file that may be JSON-array or JSONL into a list of records.
+
+        The zjunlp/InstructIE files are distributed as a mix of formats
+        depending on the version (JSON array, JSONL, or JSON-with-root-key).
+        This helper normalizes all three into a list of dicts.
+        """
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            return []
+
+        # Fast path: JSONL (one JSON object per line).
+        if text[0] == "{" and "\n" in text:
+            records: list = []
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # Fall through to JSON-array parsing below.
+                    records = []
+                    break
+            if records:
+                return records
+
+        # Full-file JSON (array or object-with-data-key).
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("data", "records", "examples", "train", "test", "valid"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+            # Single object -> wrap in list.
+            return [data]
+        return []
 
     def verify(self, output_dir: Path | str) -> bool:
         """Verify that the dataset was downloaded correctly.
@@ -237,7 +312,7 @@ class InstructIEDownloader(DatasetDownloaderBase):
         """
         metadata_file = output_dir / "metadata.json"
         metadata_dict = self.metadata.to_dict()
-        metadata_dict["source"] = "HuggingFace:KnowLM/InstructIE"
+        metadata_dict["source"] = "HuggingFace:zjunlp/InstructIE"
         metadata_dict["task_types"] = ["entity", "relation"]
         metadata_dict["download_timestamp"] = str(Path(__file__).stat().st_mtime)
 
