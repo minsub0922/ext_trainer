@@ -203,7 +203,17 @@ python scripts/download/download_reference_gollie_assets.py
 ### 4. Preprocess Datasets
 
 ```bash
-# Normalize InstructIE to canonical format
+# (Optional) Inspect the raw JSONL schema before normalising — prints the
+# top-level keys + first few records. Useful when a new InstructIE release
+# changes field names (e.g. v1 uses `text`/`relation`, v2/IEPILE uses
+# `input`/`kg`, zh splits omit entity types, etc.).
+python scripts/preprocess/inspect_raw_fields.py data/raw/instructie/train_en.jsonl 3
+
+# Normalize InstructIE to canonical format. The parser accepts the
+# common schema variants: text|input|sentence|content for the raw text,
+# relation|relations|kg|output for the KG, and subject/predicate/object
+# in addition to head/relation/tail. Integer ids (including 0) and
+# type-less zh relations are handled.
 python scripts/preprocess/normalize_instructie.py
 
 # Merge multiple datasets (if multiple sources available)
@@ -230,32 +240,49 @@ python scripts/export/export_train_dev_test.py \
 ### 6. Export to LLaMA-Factory Format
 
 ```bash
-# Convert splits to LLaMA-Factory format
+# Convert splits to LLaMA-Factory format. Writes train.jsonl / dev.jsonl /
+# test.jsonl with {instruction, input, output} keys and generates a FLAT
+# dataset_info.json (keys: ie_sft_unified, ie_sft_unified_dev,
+# ie_sft_unified_test) — which is the layout LLaMA-Factory requires.
 python scripts/export/export_to_llamafactory.py \
   --input data/processed/splits/ \
-  --output data/processed/llamafactory/
+  --output-dir data/processed/llamafactory \
+  --dataset-name ie_sft_unified
+
+# Sanity check
+wc -l data/processed/llamafactory/{train,dev,test}.jsonl
+cat data/processed/llamafactory/dataset_info.json
+
+# If the jsonl files already exist and you only need to (re)generate the
+# registry, use the standalone tool instead:
+python scripts/export/register_llamafactory_datasets.py \
+  --dataset-dir data/processed/llamafactory \
+  --name ie_sft_unified
 ```
 
 ### 7. Run Training
 
+LoRA and full SFT now have explicit launchers per model family. The legacy
+`run_sft_qwen3.sh` / `run_sft_qwen35.sh` entrypoints still exist but are
+deprecated shims that forward to the `_lora` variant.
+
 Single-GPU LoRA (default recipe):
 
 ```bash
-bash scripts/train/run_sft_qwen3.sh     # Qwen3-0.6B   + LoRA
-bash scripts/train/run_sft_qwen35.sh    # Qwen3.5-0.8B + LoRA
-bash scripts/train/run_sft_olmo3_poc.sh # OLMo3 PoC (when models available)
+bash scripts/train/run_sft_qwen3_lora.sh      # Qwen3-0.6B   + LoRA
+bash scripts/train/run_sft_qwen35_lora.sh     # Qwen3.5-0.8B + LoRA
+bash scripts/train/run_sft_olmo3_poc.sh       # OLMo3 PoC (when models available)
 ```
 
-Multi-GPU full SFT via DeepSpeed (ZeRO-2 by default):
+Multi-GPU full SFT via DeepSpeed (ZeRO-2 by default, auto-detects NPROC):
 
 ```bash
-# Auto-detects NPROC from nvidia-smi.
-bash scripts/train/run_sft_qwen3_multigpu.sh
-bash scripts/train/run_sft_qwen35_multigpu.sh
+bash scripts/train/run_sft_qwen3_full.sh      # Qwen3-0.6B   full SFT
+bash scripts/train/run_sft_qwen35_full.sh     # Qwen3.5-0.8B full SFT
 
-# Override: pick a specific config (LoRA + DeepSpeed works too).
+# Override: pick a specific config or pin NPROC.
 CONFIG=configs/sft/qwen3_full_sft_ds.yaml NPROC=4 \
-  bash scripts/train/run_sft_qwen3_multigpu.sh
+  bash scripts/train/run_sft_qwen3_full.sh
 ```
 
 H100 / Hopper: every SFT YAML ships `flash_attn: fa2`. For Hopper-tuned
@@ -454,6 +481,16 @@ OLMo3 support is currently in **proof-of-concept (PoC)** stage. The adapter fram
 - Ensure model is available on HuggingFace Hub or locally cached
 - Check `CUDA_VISIBLE_DEVICES` if CUDA/GPU errors occur
 - For OLMo3, verify `OLMO3_TRUST_REMOTE_CODE=true` in `.env`
+
+### Data Pipeline Issues
+
+- **LLaMA-Factory `SchemaInferenceError` / "Generating train split: 0 examples"**: The exported jsonl under `data/processed/llamafactory/` is empty. Re-run `scripts/export/export_to_llamafactory.py` and confirm the "Conversion Statistics" line shows non-zero counts. Sanity-check with `wc -l data/processed/llamafactory/*.jsonl`.
+- **`ValueError: Undefined dataset ie_sft_unified in dataset_info.json`**: The YAML config references a dataset name that the registry doesn't define. Pass `--dataset-name ie_sft_unified` to the exporter (or run `scripts/export/register_llamafactory_datasets.py`) so `dataset_info.json` contains that flat entry.
+- **InstructIE parser: "Record N: text is empty" for every record**: The release is a v2/IEPILE-style schema that uses `input` instead of `text`. The current parser accepts `text|input|sentence|content` and `relation|relations|kg|output` aliases — pull the latest `src/datasets/instructie/parser.py` if you still see this on known-good data.
+- **Pydantic `string_type` error with `input_value=<int>`**: Some InstructIE splits carry integer `id` fields (including `id=0`). The converter defensively stringifies ids — if an error persists, clear bytecode cache: `find src -name __pycache__ -exec rm -rf {} +`.
+- **Exporter writes 0/N records from a per-split file**: Historical bug where `process_directory` forwarded the CLI `split` to the converter and the per-record `meta.split` (e.g. `train_en`) didn't match the filename (`train`). Fixed — the directory processor now always passes `split="all"` so per-split files are emitted verbatim.
+- **`'Answer' object has no attribute 'to_canonical_dict'`**: Only `CanonicalIERecord` defines `to_canonical_dict`; nested `Answer` is a plain pydantic `BaseModel`. The exporter uses `record.answer.model_dump(exclude_none=False)` — pull the latest `scripts/export/export_to_llamafactory.py`.
+- **Inspecting unknown raw schemas**: Use `python scripts/preprocess/inspect_raw_fields.py <path/to/file.jsonl> [limit]` to print top-level key counts and a preview of the first N records. Handy when onboarding a new dataset release.
 
 ## References
 
