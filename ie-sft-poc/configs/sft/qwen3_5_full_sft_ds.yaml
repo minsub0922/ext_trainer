@@ -1,0 +1,72 @@
+### Qwen3.5-0.8B Full SFT + DeepSpeed ZeRO-2 Training Configuration
+### LLaMA-Factory compatible config for multi-GPU full fine-tuning.
+###
+### Sibling of qwen3_full_sft_ds.yaml — same recipe, scaled up to the
+### Qwen3.5-0.8B base. Prefer this over the LoRA variant when you want
+### every weight to update.
+###
+### Launch:
+###   torchrun --nproc_per_node=<N_GPUS> \
+###     $(which llamafactory-cli) train configs/sft/qwen3_5_full_sft_ds.yaml
+###
+### Or via the helper:
+###   CONFIG=configs/sft/qwen3_5_full_sft_ds.yaml NPROC=4 \
+###     bash scripts/train/run_sft_qwen35_multigpu.sh
+
+# Model Configuration
+model_name_or_path: Qwen/Qwen3.5-0.8B
+template: qwen
+
+# Training Method — FULL fine-tune (not LoRA)
+stage: sft
+do_train: true
+finetuning_type: full
+
+# DeepSpeed — relative to project root.
+# Switch to deepspeed_z3.json if ZeRO-2 OOMs (unlikely at 0.8B on A100 80GB).
+deepspeed: configs/sft/deepspeed_z2.json
+
+# Dataset Configuration
+dataset: ie_sft_unified
+dataset_dir: data/processed/llamafactory
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+# Output Configuration
+output_dir: outputs/qwen3.5-0.8b-ie-full-ds
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+# Training Hyperparameters
+# 0.8B is ~1.3x the params of 0.6B — we drop micro batch one notch vs the
+# 0.6B config to stay within per-GPU memory on common setups.
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-5
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+# Precision
+bf16: true
+fp16: false
+
+# Evaluation
+eval_strategy: steps
+eval_steps: 500
+
+# Other
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard
+
+# Notes
+# - Effective batch size = 2 (micro) * 8 (grad_accum) * N_GPUS
+# - With 4x A100 80GB: ~45-90 min for InstructIE scale
+# - If Qwen3.5-0.8B does not resolve on the Hub, adjust model_name_or_path
+#   to the actual released checkpoint you intend to use.

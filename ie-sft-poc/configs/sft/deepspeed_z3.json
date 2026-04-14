@@ -1,0 +1,39 @@
+{
+  "//": "DeepSpeed ZeRO Stage 3 config for LLaMA-Factory.",
+  "//_usage": "Pass as `--deepspeed configs/sft/deepspeed_z3.json`.",
+  "//_when_to_use": "Full SFT on very large models (30B+) or any scenario where ZeRO-2 still OOMs. Enables optimizer + gradient + parameter partitioning, plus optional CPU/NVMe offload.",
+
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": "auto",
+
+  "zero_optimization": {
+    "stage": 3,
+    "overlap_comm": true,
+    "contiguous_gradients": true,
+    "sub_group_size": 1e9,
+    "reduce_bucket_size": "auto",
+    "stage3_prefetch_bucket_size": "auto",
+    "stage3_param_persistence_threshold": "auto",
+    "stage3_max_live_parameters": 1e9,
+    "stage3_max_reuse_distance": 1e9,
+    "stage3_gather_16bit_weights_on_model_save": true,
+
+    "//_offload_notes": "Uncomment the two blocks below to offload optimizer state / params to CPU RAM. Trades GPU memory for ~2-5x slower step time.",
+    "_offload_optimizer_disabled": {
+      "device": "cpu",
+      "pin_memory": true
+    },
+    "_offload_param_disabled": {
+      "device": "cpu",
+      "pin_memory": true
+    }
+  },
+
+  "bf16": { "enabled": "auto" },
+  "fp16": { "enabled": "auto" },
+
+  "steps_per_print": 50,
+  "wall_clock_breakdown": false
+}

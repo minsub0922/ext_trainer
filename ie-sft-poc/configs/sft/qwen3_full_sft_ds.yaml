@@ -1,0 +1,67 @@
+### Qwen3-0.6B Full SFT + DeepSpeed ZeRO-2 Training Configuration
+### LLaMA-Factory compatible config for multi-GPU full fine-tuning.
+###
+### When to use this vs qwen3_lora_sft.yaml:
+### - You want to update ALL weights (not just a LoRA adapter) for max task fit
+### - You have at least 2x A100 80GB (or equivalent) available
+### - You are OK with larger checkpoints (full model instead of small adapter)
+###
+### Launch:
+###   torchrun --nproc_per_node=<N_GPUS> \
+###     $(which llamafactory-cli) train configs/sft/qwen3_full_sft_ds.yaml
+
+# Model Configuration
+model_name_or_path: Qwen/Qwen3-0.6B
+template: qwen
+
+# Training Method — FULL fine-tune (not LoRA)
+stage: sft
+do_train: true
+finetuning_type: full
+
+# DeepSpeed — relative to project root.
+# Use deepspeed_z3.json if ZeRO-2 OOMs at your chosen batch size.
+deepspeed: configs/sft/deepspeed_z2.json
+
+# Dataset Configuration
+dataset: ie_sft_unified
+dataset_dir: data/processed/llamafactory
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+# Output Configuration
+output_dir: outputs/qwen3-0.6b-ie-full-ds
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+# Training Hyperparameters — full SFT uses much smaller LR than LoRA
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-5          # full SFT: 1e-5 ~ 5e-5 typical
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+# Precision
+bf16: true
+fp16: false
+
+# Evaluation
+eval_strategy: steps
+eval_steps: 500
+
+# Other
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard
+
+# Notes
+# - Effective batch size = 2 (micro) * 8 (grad_accum) * N_GPUS
+# - With 4x A100 80GB: ~30-60 min for InstructIE scale
+# - For 7B+ models consider switching to deepspeed_z3.json and lower the
+#   micro batch size to 1.
