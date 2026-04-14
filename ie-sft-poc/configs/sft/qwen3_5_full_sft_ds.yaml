@@ -59,6 +59,7 @@ fp16: false
 flash_attn: fa2
 
 # Evaluation
+val_size: 0.05
 eval_strategy: steps
 eval_steps: 500
 

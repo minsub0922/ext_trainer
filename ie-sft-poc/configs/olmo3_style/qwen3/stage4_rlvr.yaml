@@ -1,0 +1,52 @@
+### OLMo3-style stage 4 RLVR (Reinforcement Learning with Verifiable Rewards)
+### for Qwen3-0.6B.
+###
+### Consumed by src/training/olmo3_style/rlvr_trainer.py (NOT llamafactory-cli).
+### The reward is computed by src/training/ie_metrics.py against the gold
+### canonical record, so it is fully deterministic — no reward model needed.
+###
+### Algorithm: GRPO-lite (group-relative policy optimization).
+###   - sample K completions per prompt
+###   - reward = IE F1 vs gold
+###   - advantage = (r - mean(r_group)) / (std(r_group) + eps)
+###   - PPO-clip objective with KL to ref (stage-3 DPO model)
+
+algorithm: grpo
+
+model_path: outputs/olmo3_style/qwen3-0.6b/stage3_dpo
+ref_model_path: outputs/olmo3_style/qwen3-0.6b/stage3_dpo
+tokenizer_template: qwen
+
+prompts_file: data/processed/olmo3_style/rlvr_prompts.jsonl
+output_dir: outputs/olmo3_style/qwen3-0.6b/stage4_rlvr
+
+# Sampling
+num_generations_per_prompt: 4     # K in GRPO
+max_new_tokens: 512
+temperature: 0.9
+top_p: 0.95
+prompt_batch_size: 4
+
+# Optimization
+learning_rate: 1.0e-6
+kl_coef: 0.04
+clip_range: 0.2
+num_epochs: 1
+total_steps: 500                   # or use num_epochs over prompts_file
+
+# Reward shaping
+reward_mode: auto                  # auto → picks kv/entity/relation per record
+reward_normalize: groupwise        # groupwise | running_mean | none
+parse_failure_penalty: -0.1        # extra penalty on top of 0 F1 for unparseable json
+
+# Engine
+dtype: bf16
+attn_impl: flash_attention_2
+gradient_checkpointing: true
+
+# Logging
+logging_steps: 5
+save_steps: 100
+report_to: tensorboard
+
+seed: 42

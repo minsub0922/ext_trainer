@@ -46,6 +46,10 @@ fp16: false
 flash_attn: fa2
 
 # Evaluation
+# val_size: fraction of train used as internal validation split.
+# Set to 0 and use `eval_dataset: <name>` if you have a dedicated dev set
+# registered in data/processed/llamafactory/dataset_info.json.
+val_size: 0.05
 eval_strategy: steps
 eval_steps: 500
 

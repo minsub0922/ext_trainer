@@ -1,0 +1,52 @@
+### OLMo3-style stage 2 SFT for Qwen3-0.6B.
+###
+### Starts from the mid-trained checkpoint (stage 1 output), NOT the raw
+### Qwen3-0.6B hub model. Uses the existing SFT recipe but wires the
+### model_name_or_path to the stage-1 output dir.
+###
+### If you want to skip stage 1, point model_name_or_path back to
+### `Qwen/Qwen3-0.6B` and this becomes equivalent to configs/sft/qwen3_full_sft_ds.yaml.
+
+model_name_or_path: outputs/olmo3_style/qwen3-0.6b/stage1_midtrain
+template: qwen
+
+stage: sft
+do_train: true
+finetuning_type: full
+
+deepspeed: configs/sft/deepspeed_z2.json
+
+dataset: ie_sft_unified
+dataset_dir: data/processed/llamafactory
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+output_dir: outputs/olmo3_style/qwen3-0.6b/stage2_sft
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+# Slightly higher LR than vanilla full SFT since we warm-started from a
+# mid-trained model (still much lower than LoRA).
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 2.0e-5
+num_train_epochs: 2
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+bf16: true
+fp16: false
+flash_attn: fa2
+
+val_size: 0.05
+eval_strategy: steps
+eval_steps: 500
+
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard

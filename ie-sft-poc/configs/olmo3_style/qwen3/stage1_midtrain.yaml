@@ -1,0 +1,60 @@
+### OLMo3-style mid-training (stage 1) for Qwen3-0.6B.
+###
+### "Mid-training" = short continued-pretraining pass on a high-quality
+### IE-heavy mixture, done BEFORE instruction tuning. Goal: bias the
+### base model toward IE distribution without destroying general ability.
+###
+### Key differences vs SFT:
+###   stage: pt          (pretrain / LM loss on packed raw text)
+###   template: none     (no chat template — raw concat)
+###   very small LR, very short (1 epoch or less)
+###
+### Expected dataset (see scripts/preprocess/olmo3_style/build_midtrain_mixture.py):
+###   data/processed/olmo3_style/midtrain.jsonl
+###   each line: {"text": "..."}  — schema-rendered IE records as flat text
+
+model_name_or_path: Qwen/Qwen3-0.6B
+template: none
+
+# Pretrain stage — no SFT loss masking; predict every token.
+stage: pt
+do_train: true
+finetuning_type: full
+
+deepspeed: configs/sft/deepspeed_z2.json
+
+# Dataset
+dataset: ie_midtrain
+dataset_dir: data/processed/olmo3_style
+cutoff_len: 4096
+preprocessing_num_workers: 4
+packing: true
+
+# Output
+output_dir: outputs/olmo3_style/qwen3-0.6b/stage1_midtrain
+logging_steps: 20
+save_steps: 1000
+save_total_limit: 2
+
+# Hyperparameters — mid-training is aggressive-but-short.
+# OLMo/Tulu style: low peak LR with cosine decay, 1 epoch.
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 5.0e-6
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.02
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+# Precision
+bf16: true
+fp16: false
+flash_attn: fa2
+
+# Other
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard

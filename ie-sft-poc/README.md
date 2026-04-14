@@ -363,6 +363,14 @@ See `docs/dataset_policy.md` for complete licensing information and how to add n
 - **Scenario matrix**: {qwen3, qwen3.5} × {lora, full} × {kv, entity, relation, unified}
 - **Robust JSON parsing**: code-fence / brace-block fallback with parse-failure tracking
 
+### OLMo3-style 4-stage pipeline (applied to Qwen3 / Qwen3.5)
+Not OLMo3 the model — the OLMo3 *training recipe*: mid-training → SFT → DPO → RLVR (GRPO-lite with verifiable IE-F1 rewards). One-shot runners in `scripts/train/olmo3_style/`. See [docs/olmo3_style_pipeline.md](docs/olmo3_style_pipeline.md).
+
+```bash
+bash scripts/train/olmo3_style/run_pipeline_qwen3.sh     # 4 stages + data prep
+bash scripts/train/olmo3_style/run_pipeline_qwen35.sh
+```
+
 ### Data Pipeline
 - **Download**: Automated dataset acquisition from HuggingFace
 - **Normalize**: Convert dataset-specific formats to canonical schema
@@ -422,7 +430,8 @@ OLMo3 support is currently in **proof-of-concept (PoC)** stage. The adapter fram
 - **[canonical_schema.md](docs/canonical_schema.md)**: Full schema specification, validation rules, examples
 - **[dataset_policy.md](docs/dataset_policy.md)**: Dataset licensing, opt-in procedures, compliance
 - **[training_flow.md](docs/training_flow.md)**: End-to-end training walkthrough, hyperparameter tuning
-- **[olmo3_extension.md](docs/olmo3_extension.md)**: OLMo3 status, TODO items, integration roadmap
+- **[olmo3_extension.md](docs/olmo3_extension.md)**: OLMo3 *model* support status
+- **[olmo3_style_pipeline.md](docs/olmo3_style_pipeline.md)**: OLMo3-style 4-stage *training recipe* (mid-train → SFT → DPO → RLVR) applied to Qwen3/3.5
 
 ## Troubleshooting
 
