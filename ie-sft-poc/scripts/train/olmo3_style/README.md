@@ -10,8 +10,11 @@ Launchers for the OLMo3-style training recipe (mid-train → SFT → DPO → RLV
 | `run_stage2_sft.sh` | 2. SFT | Full-parameter supervised fine-tuning on `ie_sft_unified`, starting from the stage-1 checkpoint. |
 | `run_stage3_dpo.sh` | 3. DPO | Direct Preference Optimization on pairs sampled from the stage-2 model. |
 | `run_stage4_rlvr.sh` | 4. RLVR | GRPO-lite with verifiable IE-F1 rewards; uses the custom trainer in `src/training/olmo3_style/rlvr_trainer.py`. |
-| `run_pipeline_qwen3.sh` | all | Runs stages 1–4 back-to-back for Qwen3-0.6B, invoking the data-prep scripts as needed. |
-| `run_pipeline_qwen35.sh` | all | Same, for Qwen3.5. |
+| `run_pipeline_qwen3.sh` | all | Runs stages 1–4 back-to-back for Qwen3-0.6B, invoking the **stage-specific** data-prep scripts as needed. Assumes base splits already exist. |
+| `run_pipeline_qwen35.sh` | all | Same, for Qwen3.5-0.8B. |
+| `run_oneshot_qwen3.sh` | all + base prep | **Zero-to-trained** for Qwen3-0.6B: runs the base data pipeline (download → normalize → unify → split → export) then hands off to `run_pipeline_qwen3.sh`. Idempotent; skips any phase whose output already exists. |
+| `run_oneshot_qwen35.sh` | all + base prep | Same, for Qwen3.5-0.8B. |
+| `_oneshot_common.sh` | — | Shared `run_data_pipeline` helper sourced by the oneshots. |
 
 Each stage launcher reads a YAML config under `configs/olmo3_style/<model>/stageN_*.yaml`.
 

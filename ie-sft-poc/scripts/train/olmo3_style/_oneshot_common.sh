@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Shared helpers for one-shot train launchers.
+# Shared helpers for OLMo3-style one-shot launchers.
 #
 # Source this file; it defines:
-#   - PROJECT_ROOT       (absolute)
-#   - DATA_RAW / DATA_SPLITS / DATA_LF   (conventional locations)
+#   - PROJECT_ROOT (absolute)
+#   - DATA_RAW / DATA_CANONICAL / DATA_UNIFIED / DATA_SPLITS / DATA_LF
 #   - run_data_pipeline  (idempotent: download → normalize → unify → split → export)
-#   - run_train          (exec llamafactory-cli train "$CONFIG")
 #
-# Each phase is skipped if its expected output already exists.
+# Each phase is skipped if its expected output already exists. Training is
+# invoked by the individual olmo3_style stage scripts, not by this file —
+# this only handles the pre-training data prep shared by all model-specific
+# oneshots.
 
 set -euo pipefail
 
-SCRIPT_DIR_COMMON="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR_COMMON}/../../.." && pwd)"
+_ONESHOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${_ONESHOT_DIR}/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 DATA_RAW="data/raw/instructie"
@@ -65,7 +67,7 @@ run_data_pipeline() {
     log "skip split (splits present)"
   fi
 
-  # 5. export to LLaMA-Factory
+  # 5. export to LLaMA-Factory (stage 2 SFT reads this)
   if ! have "${DATA_LF}/train.jsonl" || [[ ! -s "${DATA_LF}/train.jsonl" ]]; then
     log "export to LLaMA-Factory format"
     mkdir -p "${DATA_LF}"
@@ -76,14 +78,4 @@ run_data_pipeline() {
   else
     log "skip export (${DATA_LF}/train.jsonl non-empty)"
   fi
-}
-
-run_train() {
-  local config="$1"
-  [[ -f "$config" ]] || { echo "missing $config" >&2; exit 1; }
-  command -v llamafactory-cli >/dev/null || {
-    echo "llamafactory-cli not found in PATH" >&2; exit 2;
-  }
-  log "train with $config"
-  exec llamafactory-cli train "$config"
 }
