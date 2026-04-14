@@ -176,14 +176,21 @@ def process_directory(
             continue
 
         output_path = output_dir / f"{split}.jsonl"
+        # The per-split file IS the authoritative split — records inside
+        # carry their original meta.split label (e.g. "train_en"), which
+        # wouldn't equal "train". Pass "all" so the converter emits every
+        # record in the file.
         stats = convert_to_llamafactory(
             input_path=input_path,
             output_path=output_path,
             prompt_mode=prompt_mode,
             custom_template=custom_template,
-            split=split,
+            split="all",
         )
         all_stats[split] = stats
+        logger.info(
+            f"[{split}] wrote {stats['total_output']}/{stats['total_input']} records"
+        )
 
     return all_stats
 
