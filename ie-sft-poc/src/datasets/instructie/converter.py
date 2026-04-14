@@ -37,7 +37,11 @@ def convert_record(parsed: dict, split: str = "train") -> CanonicalIERecord:
         ValueError: If record cannot be converted.
     """
     try:
-        record_id = parsed.get("id", "")
+        # Some InstructIE splits carry integer ids (e.g. id=0, 746).
+        # CanonicalIERecord.id is typed as str, so coerce defensively
+        # regardless of what the parser returns.
+        raw_id = parsed.get("id", "")
+        record_id = "" if raw_id is None else str(raw_id)
         text = parsed.get("text", "")
         category = parsed.get("category", "")
         entities_dict = parsed.get("entities", {})
