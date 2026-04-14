@@ -40,6 +40,9 @@ max_grad_norm: 1.0
 bf16: true
 fp16: false
 
+# Attention backend — fa2 = FlashAttention-2 (A100/H100/L40S).
+flash_attn: fa2
+
 # Evaluation
 eval_strategy: steps
 eval_steps: 500

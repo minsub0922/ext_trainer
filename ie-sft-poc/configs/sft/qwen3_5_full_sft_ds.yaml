@@ -55,6 +55,9 @@ weight_decay: 0.0
 bf16: true
 fp16: false
 
+# Attention backend — fa2 on A100/H100/L40S.
+flash_attn: fa2
+
 # Evaluation
 eval_strategy: steps
 eval_steps: 500

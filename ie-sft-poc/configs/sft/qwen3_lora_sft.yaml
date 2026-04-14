@@ -40,6 +40,11 @@ max_grad_norm: 1.0
 bf16: true
 fp16: false
 
+# Attention backend — fa2 = FlashAttention-2 (A100/H100/L40S).
+# LLaMA-Factory forwards this to HF as attn_implementation=flash_attention_2.
+# Set to `sdpa` if flash-attn isn't installed.
+flash_attn: fa2
+
 # Evaluation
 eval_strategy: steps
 eval_steps: 500

@@ -1,0 +1,35 @@
+# Hopper (H100 / H200) overrides.
+#
+# Merge these keys into any base SFT yaml for Hopper-class GPUs:
+#   cp configs/sft/qwen3_full_sft_ds.yaml configs/sft/qwen3_full_sft_ds_h100.yaml
+#   cat configs/sft/h100_overrides.yaml >> configs/sft/qwen3_full_sft_ds_h100.yaml
+#
+# What changes vs Ampere defaults:
+#   * flash_attn: fa2 — Hopper fused attention (~1.8x vs SDPA on 2k seq).
+#   * tf32 on matmul — free speedup for fp32 fallback ops.
+#   * deepspeed_z2_h100.json — Hopper-tuned overlap + grad accum dtype.
+#   * torch_compile on — Hopper has stable inductor support.
+#   * Doubled per_device micro batch — H100 has ~2x memory/FLOPs vs A100 40GB.
+#
+# FP8 (Transformer Engine) is commented below — enable only if you have
+# TE installed (pip install transformer_engine[pytorch]) and your model
+# path has TE layer replacements, otherwise the run will crash.
+
+flash_attn: fa2
+tf32: true
+
+# Bigger microbatch possible on 80GB H100 (0.6-0.8B models).
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 4
+
+# torch.compile — Hopper-friendly. Disable if you hit inductor bugs.
+use_compile: true
+
+# Hopper DeepSpeed profile (set alongside `finetuning_type: full`).
+# deepspeed: configs/sft/deepspeed_z2_h100.json
+
+# FP8 mixed precision (opt-in).
+# Requires NVIDIA Transformer Engine and a model with TE layers.
+# fp8: true
+# fp8_backend: te
