@@ -7,6 +7,10 @@
 #       --model qwen3   --variant lora --mode unified
 #   bash scripts/eval/run_eval_scenario.sh \
 #       --model qwen3.5 --variant full --mode kv
+#   bash scripts/eval/run_eval_scenario.sh \
+#       --model qwen3-8b --variant base --mode unified
+#   bash scripts/eval/run_eval_scenario.sh \
+#       --model qwen3.5-9b --variant base --mode unified
 #
 # Or use the thin wrappers (run_eval_qwen3_lora.sh, ...).
 #
@@ -40,19 +44,30 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$MODEL"   ]] && { echo "--model {qwen3|qwen3.5} required"   >&2; exit 2; }
-[[ -z "$VARIANT" ]] && { echo "--variant {lora|full} required"     >&2; exit 2; }
+[[ -z "$MODEL"   ]] && { echo "--model required"   >&2; exit 2; }
+[[ -z "$VARIANT" ]] && { echo "--variant required" >&2; exit 2; }
 
 case "$MODEL" in
-  qwen3)   BASE="Qwen/Qwen3-0.6B";    TAG="qwen3-0.6b"  ;;
-  qwen3.5) BASE="Qwen/Qwen3.5-0.8B";  TAG="qwen3.5-0.8b";;
+  qwen3)      BASE="Qwen/Qwen3-0.6B";        TAG="qwen3-0.6b"   ;;
+  qwen3.5)    BASE="Qwen/Qwen3.5-0.8B";      TAG="qwen3.5-0.8b" ;;
+  qwen3-8b)   BASE="Qwen/Qwen3-8B-Base";     TAG="qwen3-8b"     ;;
+  qwen3.5-9b) BASE="Qwen/Qwen3.5-9B-Base";   TAG="qwen3.5-9b"   ;;
   *) echo "bad --model: $MODEL" >&2; exit 2 ;;
 esac
 
 case "$VARIANT" in
   lora) ADAPTER_DIR="outputs/${TAG}-ie-lora";     ADAPTER_FLAG="--adapter-path ${PROJECT_ROOT}/${ADAPTER_DIR}" ;;
   full) ADAPTER_DIR="outputs/${TAG}-ie-full-ds";  ADAPTER_FLAG="" ;;
+  base) ADAPTER_DIR="";                           ADAPTER_FLAG="" ;;
   *) echo "bad --variant: $VARIANT" >&2; exit 2 ;;
+esac
+
+case "$MODEL/$VARIANT" in
+  qwen3-8b/base|qwen3.5-9b/base) : ;;
+  qwen3-8b/*|qwen3.5-9b/*)
+    echo "--model $MODEL only supports --variant base" >&2
+    exit 2
+    ;;
 esac
 
 case "$MODE" in

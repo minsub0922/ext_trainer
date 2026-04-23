@@ -542,18 +542,15 @@ MODE=relation bash scripts/eval/run_eval_qwen35_lora.sh
 # Full matrix (2 models x 2 variants x 4 modes; skips missing ckpts)
 bash scripts/eval/run_eval_all.sh
 
-# Arbitrary model comparison (HF ids, local merged dirs, optional LoRA adapters)
-bash scripts/eval/run_eval_compare_models.sh \
-  --candidate base=Qwen/Qwen3.5-0.8B \
-  --candidate lora=Qwen/Qwen3.5-0.8B::outputs/qwen3.5-0.8b-ie-lora
+# Base checkpoints
+bash scripts/eval/run_eval_qwen3_8b_base.sh
+bash scripts/eval/run_eval_qwen35_9b_base.sh
 ```
 
 Each scenario writes to `outputs/eval/<tag>-<variant>-<mode>/`:
 
 - `test_predictions.jsonl` — `{id, prompt, prediction, gold}` per row
 - `metrics.json` — per-task PRF1 plus parse-failure counts
-
-Comparison sweeps additionally write `outputs/eval/comparisons/<run-name>/summary.{json,md}`.
 
 Env knobs: `TEST_FILE`, `BATCH_SIZE`, `MAX_NEW`, `LIMIT`, `DTYPE`
 (`bf16` default; use `fp16` on Volta). See `scripts/eval/README.md`.
