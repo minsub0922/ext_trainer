@@ -73,7 +73,7 @@ def main() -> int:
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        write_json(out_path, summary)
+        write_json(summary, out_path)
         logger.info(f"Wrote metrics summary -> {out_path}")
 
     return 0
