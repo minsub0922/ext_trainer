@@ -87,10 +87,34 @@ def main() -> None:
     dtype_map = {"bf16": torch.bfloat16, "fp16": torch.float16,
                  "fp32": torch.float32}
     tok = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path, dtype=dtype_map[args.dtype],
-        attn_implementation="flash_attention_2", trust_remote_code=True,
-    )
+    if tok.pad_token_id is None:
+        tok.pad_token = tok.eos_token
+
+    # Detect best available attention implementation via transformers' own check
+    attn_impl = "sdpa"
+    try:
+        from transformers.utils import is_flash_attn_2_available
+        if is_flash_attn_2_available():
+            attn_impl = "flash_attention_2"
+    except Exception:
+        pass
+
+    # Load with fallback: if chosen attn_impl still fails, retry with sdpa
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_path, torch_dtype=dtype_map[args.dtype],
+            attn_implementation=attn_impl, device_map="auto",
+            trust_remote_code=True,
+        )
+    except (ImportError, ValueError):
+        if attn_impl == "sdpa":
+            raise
+        print(f"[WARN] attn_implementation={attn_impl} failed; retrying with sdpa")
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_path, torch_dtype=dtype_map[args.dtype],
+            attn_implementation="sdpa", device_map="auto",
+            trust_remote_code=True,
+        )
     model.eval()
     device = next(model.parameters()).device
 

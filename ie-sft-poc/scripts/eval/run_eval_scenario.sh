@@ -14,14 +14,15 @@
 #   TEST_FILE    (default: data/processed/splits/test.jsonl)
 #   BATCH_SIZE   (default: 8)
 #   MAX_NEW      (default: 512)
-#   LIMIT        (default: 0 = all)
+#   LIMIT        (default: 200 — use 0 for all)
 #   DTYPE        (default: bf16)
 #   OUT_ROOT     (default: outputs/eval)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/../_common.sh"
+cd "$PROJECT_ROOT"
 
 MODEL=""
 VARIANT=""
@@ -62,7 +63,7 @@ esac
 TEST_FILE="${TEST_FILE:-data/processed/splits/test.jsonl}"
 BATCH_SIZE="${BATCH_SIZE:-8}"
 MAX_NEW="${MAX_NEW:-512}"
-LIMIT="${LIMIT:-0}"
+LIMIT="${LIMIT:-200}"
 DTYPE="${DTYPE:-bf16}"
 OUT_ROOT="${OUT_ROOT:-outputs/eval}"
 
@@ -90,8 +91,6 @@ echo "  MAX_NEW:      $MAX_NEW"
 echo "  DTYPE:        $DTYPE"
 echo "  LIMIT:        $LIMIT"
 echo "==========================================="
-
-cd "$PROJECT_ROOT"
 
 # shellcheck disable=SC2086
 python scripts/eval/evaluate_end_to_end.py \

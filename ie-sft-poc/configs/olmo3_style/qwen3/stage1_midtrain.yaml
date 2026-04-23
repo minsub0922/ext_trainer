@@ -51,7 +51,7 @@ weight_decay: 0.0
 # Precision
 bf16: true
 fp16: false
-flash_attn: fa2
+flash_attn: auto
 
 # Other
 ddp_timeout: 180000000

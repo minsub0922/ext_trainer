@@ -40,7 +40,7 @@ weight_decay: 0.0
 
 bf16: true
 fp16: false
-flash_attn: fa2
+flash_attn: auto
 
 val_size: 0.05
 eval_strategy: steps

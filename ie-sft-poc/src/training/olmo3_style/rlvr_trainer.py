@@ -85,6 +85,28 @@ class RLVRConfig:
         return cls(**known, extra=extra)
 
 
+def _detect_attn_implementation(requested: str = "flash_attention_2") -> str:
+    """Return ``"flash_attention_2"`` only if transformers confirms it works.
+
+    Uses ``transformers.utils.is_flash_attn_2_available()`` — the **same**
+    check that ``from_pretrained`` runs internally — so we never pass a
+    value that will blow up at model-init time.
+    """
+    if requested not in ("flash_attention_2", "fa2", "auto"):
+        return requested
+    try:
+        from transformers.utils import is_flash_attn_2_available
+
+        if is_flash_attn_2_available():
+            logger.info("Flash Attention 2 available (transformers check passed)")
+            return "flash_attention_2"
+        else:
+            logger.info("Flash Attention 2 NOT available; using sdpa")
+    except Exception as exc:
+        logger.info("Could not check flash-attn availability (%s); using sdpa", exc)
+    return "sdpa"
+
+
 def _load_prompts(path: str | Path) -> list[dict]:
     out: list[dict] = []
     with open(path, "r", encoding="utf-8") as fh:
@@ -111,15 +133,19 @@ def _score_completion(completion: str, gold: dict, task_type: str,
     """Verifiable reward — defer to ie_metrics."""
     from ..ie_metrics import evaluate
     m = evaluate([completion], [gold], task_types=[task_type])
-    if task_type == "kv":
+    if task_type == "kv" and m.kv is not None:
         r = m.kv.f1
-    elif task_type == "entity":
+    elif task_type == "entity" and m.entity is not None:
         r = m.entity.f1
-    elif task_type == "relation":
+    elif task_type == "relation" and m.relation is not None:
         r = m.relation.f1
     else:
-        r = max(m.kv.f1, m.entity.f1, m.relation.f1)
-    if m.parse_failures > 0:
+        r = max(
+            m.kv.f1 if m.kv else 0.0,
+            m.entity.f1 if m.entity else 0.0,
+            m.relation.f1 if m.relation else 0.0,
+        )
+    if m.n_parse_failures > 0:
         r = r + parse_failure_penalty
     return float(r)
 
@@ -140,33 +166,49 @@ class RLVRTrainer:
 
     # ---- lifecycle --------------------------------------------------
 
+    @staticmethod
+    def _load_model_with_fallback(path, dtype, attn_impl):
+        """Load model; if *attn_impl* causes an error, retry with sdpa."""
+        from transformers import AutoModelForCausalLM
+
+        try:
+            return AutoModelForCausalLM.from_pretrained(
+                path, torch_dtype=dtype, attn_implementation=attn_impl,
+                device_map="auto", trust_remote_code=True,
+            )
+        except (ImportError, ValueError) as exc:
+            if attn_impl == "sdpa":
+                raise
+            logger.warning("attn_implementation=%s failed (%s); retrying with sdpa",
+                           attn_impl, exc)
+            return AutoModelForCausalLM.from_pretrained(
+                path, torch_dtype=dtype, attn_implementation="sdpa",
+                device_map="auto", trust_remote_code=True,
+            )
+
     def _load(self) -> None:
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoTokenizer
 
         dtype = {"bf16": torch.bfloat16, "fp16": torch.float16,
                  "fp32": torch.float32}[self.cfg.dtype]
 
+        attn_impl = _detect_attn_implementation(self.cfg.attn_impl)
+
         logger.info("loading policy from %s", self.cfg.model_path)
         self._tok = AutoTokenizer.from_pretrained(self.cfg.model_path,
                                                   trust_remote_code=True)
-        self._policy = AutoModelForCausalLM.from_pretrained(
-            self.cfg.model_path,
-            dtype=dtype,
-            attn_implementation=self.cfg.attn_impl,
-            trust_remote_code=True,
-        )
+        if self._tok.pad_token_id is None:
+            self._tok.pad_token = self._tok.eos_token
+
+        self._policy = self._load_model_with_fallback(
+            self.cfg.model_path, dtype, attn_impl)
         if self.cfg.gradient_checkpointing:
             self._policy.gradient_checkpointing_enable()
 
         ref_path = self.cfg.ref_model_path or self.cfg.model_path
         logger.info("loading ref from %s", ref_path)
-        self._ref = AutoModelForCausalLM.from_pretrained(
-            ref_path,
-            dtype=dtype,
-            attn_implementation=self.cfg.attn_impl,
-            trust_remote_code=True,
-        )
+        self._ref = self._load_model_with_fallback(ref_path, dtype, attn_impl)
         self._ref.eval()
         for p in self._ref.parameters():
             p.requires_grad = False
@@ -286,3 +328,12 @@ def run_rlvr(config_path: str | Path) -> None:
                         format="%(asctime)s %(levelname)s %(message)s")
     cfg = RLVRConfig.from_yaml(config_path)
     RLVRTrainer(cfg).train()
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print(f"Usage: python -m {__spec__.name if __spec__ else __name__} <config.yaml>")
+        sys.exit(1)
+    run_rlvr(sys.argv[1])

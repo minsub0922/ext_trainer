@@ -7,8 +7,9 @@
 ### - You are OK with larger checkpoints (full model instead of small adapter)
 ###
 ### Launch:
-###   torchrun --nproc_per_node=<N_GPUS> \
-###     $(which llamafactory-cli) train configs/sft/qwen3_full_sft_ds.yaml
+###   NPROC=4 bash scripts/train/run_sft.sh --model qwen3 --variant full
+###   # or directly:
+###   FORCE_TORCHRUN=1 NPROC_PER_NODE=4 llamafactory-cli train configs/sft/qwen3_full_sft_ds.yaml
 
 # Model Configuration
 model_name_or_path: Qwen/Qwen3-0.6B
@@ -50,8 +51,8 @@ weight_decay: 0.0
 bf16: true
 fp16: false
 
-# Attention backend — fa2 on A100/H100/L40S.
-flash_attn: fa2
+# Attention backend — auto selects best available (fa2 on Ampere+, else sdpa).
+flash_attn: auto
 
 # Evaluation
 val_size: 0.05

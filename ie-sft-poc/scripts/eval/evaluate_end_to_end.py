@@ -47,7 +47,7 @@ def main() -> int:
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--dtype", default="bf16", choices=["bf16", "fp16", "fp32"])
     p.add_argument("--temperature", type=float, default=0.0)
-    p.add_argument("--limit", type=int, default=0)
+    p.add_argument("--limit", type=int, default=200, help="Max samples (0=all, default=200)")
     p.add_argument(
         "--task-types",
         nargs="+",

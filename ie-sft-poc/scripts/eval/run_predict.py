@@ -60,10 +60,60 @@ def build_prompt(record: dict, mode: str) -> str:
     return build_unified_extraction_prompt(text, sd)
 
 
+def _detect_attn_implementation() -> str:
+    """Detect the best available attention implementation.
+
+    Uses transformers' own ``is_flash_attn_2_available()`` so the check
+    is identical to the one that happens inside ``from_pretrained``.
+    Falls back to ``"sdpa"`` (PyTorch ≥2.0 scaled-dot-product) which
+    works everywhere without extra packages.
+    """
+    try:
+        from transformers.utils import is_flash_attn_2_available
+
+        if is_flash_attn_2_available():
+            logger.info("Flash Attention 2 available (transformers check passed)")
+            return "flash_attention_2"
+        else:
+            logger.info("Flash Attention 2 NOT available (transformers check); using sdpa")
+    except Exception as exc:
+        logger.info("Could not check flash-attn availability (%s); using sdpa", exc)
+    return "sdpa"
+
+
+def _load_model_with_fallback(model_path: str, torch_dtype, attn_impl: str):
+    """Try loading with *attn_impl*; on failure retry with ``"sdpa"``."""
+    from transformers import AutoModelForCausalLM
+
+    try:
+        return AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch_dtype,
+            device_map="auto",
+            trust_remote_code=True,
+            attn_implementation=attn_impl,
+        )
+    except (ImportError, ValueError) as exc:
+        if attn_impl == "sdpa":
+            raise  # already the safest option; nothing to fall back to
+        logger.warning(
+            "Loading with attn_implementation=%s failed (%s); retrying with sdpa",
+            attn_impl,
+            exc,
+        )
+        return AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch_dtype,
+            device_map="auto",
+            trust_remote_code=True,
+            attn_implementation="sdpa",
+        )
+
+
 def load_model(model_path: str, adapter_path: str | None, dtype: str):
     """Load the base model (and optional LoRA adapter) via transformers/peft."""
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoTokenizer
 
     torch_dtype = {
         "bf16": torch.bfloat16,
@@ -75,14 +125,8 @@ def load_model(model_path: str, adapter_path: str | None, dtype: str):
     if tok.pad_token_id is None:
         tok.pad_token = tok.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch_dtype,
-        device_map="auto",
-        trust_remote_code=True,
-        # Auto-picks FA2 on Ampere+/Hopper if flash-attn is installed.
-        attn_implementation="flash_attention_2",
-    )
+    attn_impl = _detect_attn_implementation()
+    model = _load_model_with_fallback(model_path, torch_dtype, attn_impl)
 
     if adapter_path:
         from peft import PeftModel
@@ -158,8 +202,8 @@ def main() -> int:
     p.add_argument(
         "--limit",
         type=int,
-        default=0,
-        help="Only run on the first N records (0 = all). Useful for smoke tests.",
+        default=200,
+        help="Only run on the first N records (0 = all). Default 200 for speed.",
     )
     p.add_argument("--dry-run", action="store_true", help="Print config and exit")
     args = p.parse_args()

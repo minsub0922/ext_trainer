@@ -41,7 +41,7 @@ parse_failure_penalty: -0.1        # extra penalty on top of 0 F1 for unparseabl
 
 # Engine
 dtype: bf16
-attn_impl: flash_attention_2
+attn_impl: auto
 gradient_checkpointing: true
 
 # Logging

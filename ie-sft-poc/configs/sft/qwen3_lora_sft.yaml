@@ -40,10 +40,11 @@ max_grad_norm: 1.0
 bf16: true
 fp16: false
 
-# Attention backend — fa2 = FlashAttention-2 (A100/H100/L40S).
-# LLaMA-Factory forwards this to HF as attn_implementation=flash_attention_2.
-# Set to `sdpa` if flash-attn isn't installed.
-flash_attn: fa2
+# Attention backend — auto selects the best available implementation:
+# fa2 (FlashAttention-2) on Ampere+/Hopper if flash-attn is installed,
+# otherwise falls back to sdpa (PyTorch SDPA). The launch scripts also
+# auto-patch this at runtime if FA2 is unavailable.
+flash_attn: auto
 
 # Evaluation
 # val_size: fraction of train used as internal validation split.
