@@ -124,6 +124,8 @@ def load_model(model_path: str, adapter_path: str | None, dtype: str):
     tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     if tok.pad_token_id is None:
         tok.pad_token = tok.eos_token
+    # Decoder-only models need left-padding for correct batch generation.
+    tok.padding_side = "left"
 
     attn_impl = _detect_attn_implementation()
     model = _load_model_with_fallback(model_path, torch_dtype, attn_impl)
@@ -256,7 +258,7 @@ def main() -> int:
             )
         logger.info(f"  generated {end}/{len(records)}")
 
-    write_jsonl(out_path, outputs)
+    write_jsonl(outputs, out_path)
     logger.info(f"Wrote {len(outputs)} predictions -> {out_path}")
     return 0
 
