@@ -122,6 +122,7 @@ ie-sft-poc/
 │   │   ├── run_eval_qwen3_full.sh
 │   │   ├── run_eval_qwen35_lora.sh
 │   │   ├── run_eval_qwen35_full.sh
+│   │   ├── run_eval_compare_models.sh  # Compare arbitrary HF/local models
 │   │   └── run_eval_all.sh             # Full matrix sweep
 │   └── utils/                          # Utility functions
 │       ├── env_check.py                # Verify environment setup
@@ -317,11 +318,17 @@ MODE=relation bash scripts/eval/run_eval_qwen35_lora.sh
 # Missing checkpoints are skipped automatically.
 bash scripts/eval/run_eval_all.sh
 
+# Arbitrary model comparison (HF ids or local checkpoints)
+bash scripts/eval/run_eval_compare_models.sh \
+  --candidate base=Qwen/Qwen3.5-0.8B \
+  --candidate lora=Qwen/Qwen3.5-0.8B::outputs/qwen3.5-0.8b-ie-lora
+
 # Smoke test (first 50 records)
 LIMIT=50 bash scripts/eval/run_eval_qwen3_lora.sh
 ```
 
 Outputs land in `outputs/eval/<tag>-<variant>-<mode>/{test_predictions.jsonl, metrics.json}`.
+Model-comparison sweeps write `outputs/eval/comparisons/<run-name>/summary.{json,md}`.
 See `scripts/eval/README.md` for the full env-var reference.
 
 ### 9. Run Inference
