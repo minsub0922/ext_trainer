@@ -62,8 +62,6 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pred_path = out_dir / "test_predictions.jsonl"
-    metrics_path = out_dir / "metrics.json"
-
     repo_root = Path(__file__).resolve().parents[2]
 
     predict_cmd = [
@@ -96,7 +94,6 @@ def main() -> int:
         sys.executable,
         str(repo_root / "scripts/eval/compute_metrics.py"),
         "--predictions", str(pred_path),
-        "--output", str(metrics_path),
     ]
     if args.task_types:
         metrics_cmd += ["--task-types", *args.task_types]
@@ -113,7 +110,7 @@ def main() -> int:
         "[%s] DONE. predictions=%s metrics=%s",
         args.scenario,
         pred_path,
-        metrics_path,
+        out_dir / "metrics.json",
     )
     return 0
 

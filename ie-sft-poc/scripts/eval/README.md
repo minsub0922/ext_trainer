@@ -9,7 +9,7 @@ quality: KV field F1, entity (type, text) set F1, and relation triple F1.
 | File | Role |
 |---|---|
 | `run_predict.py` | Batch generation from a base model (+ optional LoRA) on a canonical test JSONL. |
-| `compute_metrics.py` | Scores a predictions JSONL with `src/training/ie_metrics.py`. |
+| `compute_metrics.py` | Scores one or more predictions JSONLs with `src/training/ie_metrics.py`. |
 | `evaluate_end_to_end.py` | Runs predict + metrics back-to-back. |
 | `run_eval_scenario.sh` | Thin bash dispatcher. Parametrized by `--model / --variant / --mode`. |
 | `run_eval_{qwen3,qwen35}_{lora,full}.sh` | Wrappers for each model x variant. |
@@ -52,6 +52,20 @@ Each scenario writes to `outputs/eval/<tag>-<variant>-<mode>/`:
 
 Use `--per-record` to append a per-row breakdown to `metrics.json` for
 error analysis.
+
+You can recompute metrics later from existing predictions files without
+specifying an output path. `compute_metrics.py` writes `metrics.json`
+next to each input predictions file:
+
+```bash
+python scripts/eval/compute_metrics.py \
+  --predictions outputs/eval/qwen3-8b-base-unified/test_predictions.jsonl
+
+python scripts/eval/compute_metrics.py \
+  --predictions \
+    outputs/eval/qwen3-8b-base-unified/test_predictions.jsonl \
+    outputs/eval/qwen3.5-9b-base-unified/test_predictions.jsonl
+```
 
 ## Env knobs
 
