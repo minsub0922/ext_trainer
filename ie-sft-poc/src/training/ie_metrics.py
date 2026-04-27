@@ -82,22 +82,31 @@ def _empty_answer() -> dict[str, Any]:
 
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+_UNCLOSED_THINK_RE = re.compile(r"<think>.*", re.DOTALL)
+
+# Placeholder values that appear when model echoes the prompt template
+_PLACEHOLDER_VALUES = frozenset({
+    "entity_text", "ENTITY_TYPE", "HEAD_TYPE", "TAIL_TYPE",
+    "head_text", "tail_text", "RELATION_TYPE",
+    "field_name", "value_or_null",
+    "offset_start", "offset_end",
+})
 
 
 def _strip_think_tags(text: str) -> str:
     """Remove ``<think>…</think>`` blocks produced by Qwen3 thinking mode."""
     cleaned = _THINK_RE.sub("", text).strip()
-    # Also handle unclosed <think> — take everything after it as noise.
-    if "<think>" in cleaned:
-        # Keep only content after the last </think>, or after <think> block.
-        idx = cleaned.rfind("<think>")
-        # No closing tag — discard everything from <think> onward.
-        cleaned = cleaned[:idx].strip()
+    # Handle unclosed <think> — discard from <think> onward.
+    cleaned = _UNCLOSED_THINK_RE.sub("", cleaned).strip()
     return cleaned
 
 
 def _candidate_regions(text: str) -> list[str]:
-    """Build candidate regions, prioritizing the generated answer area."""
+    """Build candidate regions, prioritizing the generated answer area.
+
+    Handles: prompt echo, <think> tags, code fences (closed and unclosed),
+    multiple ``Output:`` markers, and combinations thereof.
+    """
     regions: list[str] = []
 
     def add(candidate: str) -> None:
@@ -105,54 +114,57 @@ def _candidate_regions(text: str) -> list[str]:
         if candidate and candidate not in regions:
             regions.append(candidate)
 
-    # 1. Strip <think> tags first (Qwen3 thinking mode)
-    text_no_think = _strip_think_tags(text)
-    if text_no_think != text:
-        # Prioritize the cleaned version
-        add(_strip_outer_code_fence(text_no_think))
+    # 1. Strip <think> tags (Qwen3 thinking mode)
+    text_clean = _strip_think_tags(text)
 
-    add(_strip_outer_code_fence(text))
-
-    # 2. Look for "Output:" markers
+    # 2. Find ALL "Output:" markers — the LAST one is most likely the real answer.
+    #    Model often echoes the full prompt which itself contains "Output:" at the end.
     marker = "output:"
-    lowered = text_no_think.lower()
-    start = 0
-    marker_positions: list[int] = []
-    while True:
-        idx = lowered.find(marker, start)
-        if idx == -1:
-            break
-        marker_positions.append(idx + len(marker))
-        start = idx + len(marker)
-
-    for pos in reversed(marker_positions):
-        add(_strip_outer_code_fence(text_no_think[pos:]))
-
-    # Also search in the original text (in case think tags weren't the issue)
-    if text_no_think != text:
-        lowered_orig = text.lower()
+    for source in (text_clean, text) if text_clean != text else (text_clean,):
+        lowered = source.lower()
+        positions: list[int] = []
         start = 0
         while True:
-            idx = lowered_orig.find(marker, start)
+            idx = lowered.find(marker, start)
             if idx == -1:
                 break
-            add(_strip_outer_code_fence(text[idx + len(marker):]))
+            positions.append(idx + len(marker))
             start = idx + len(marker)
+
+        # Iterate in reverse — last Output: is most likely the answer
+        for pos in reversed(positions):
+            after = source[pos:]
+            add(_strip_code_fence(after))
+
+    # 3. Fallback: just try the whole text (after think removal + fence strip)
+    add(_strip_code_fence(text_clean))
+    add(_strip_code_fence(text))
 
     return regions
 
 
-def _strip_outer_code_fence(text: str) -> str:
-    """Unwrap a single outer markdown fence when the whole text is fenced."""
+def _strip_code_fence(text: str) -> str:
+    """Unwrap markdown code fences, handling both closed and unclosed fences."""
     stripped = text.strip()
     if not stripped.startswith("```"):
-        return stripped
+        # Also check for fence appearing after some whitespace/newline
+        idx = stripped.find("```")
+        if idx != -1 and idx < 20:  # fence near the start
+            stripped = stripped[idx:]
+        else:
+            return stripped
 
     lines = stripped.splitlines()
-    if len(lines) < 2 or not lines[-1].strip().startswith("```"):
-        return stripped
+    # Skip the opening ``` line (may have language tag like ```json)
+    body_start = 1
+    # Find closing ```
+    body_end = len(lines)
+    for i in range(len(lines) - 1, 0, -1):
+        if lines[i].strip().startswith("```"):
+            body_end = i
+            break
 
-    body = lines[1:-1]
+    body = lines[body_start:body_end]
     return "\n".join(body).strip()
 
 
@@ -191,9 +203,138 @@ def _iter_balanced_json_objects(text: str) -> Iterable[str]:
                 yield text[start : idx + 1]
                 start = None
 
+    # If there's an unclosed JSON object, try to repair it
+    if start is not None:
+        truncated = text[start:]
+        repaired = _try_repair_truncated_json(truncated)
+        if repaired is not None:
+            yield repaired
+
+
+def _try_repair_truncated_json(text: str) -> str | None:
+    """Attempt to repair truncated JSON by closing open brackets/braces.
+
+    Handles the common case where max_new_tokens cuts off mid-JSON.
+    Uses multiple strategies:
+    1. Strip back to the last complete object/array element.
+    2. Close all remaining open containers.
+    3. If that fails, try progressively stripping trailing incomplete items.
+    """
+    if not text or "{" not in text:
+        return None
+
+    # Strategy: try multiple truncation points, from least to most aggressive
+    candidates: list[str] = []
+
+    s = text.rstrip()
+    # Remove trailing incomplete string (unclosed quote)
+    s = _strip_unclosed_string(s)
+    # Remove trailing partial tokens
+    s = re.sub(r'[,:\s]+$', '', s)
+    candidates.append(s)
+
+    # Also try stripping back to the last complete } or ]
+    for closer in ('}', ']', '"}', '"]'):
+        idx = s.rfind(closer)
+        if idx != -1:
+            candidates.append(s[:idx + len(closer)])
+
+    # Also try stripping back to the last complete }, then close containers
+    for cand in candidates:
+        cand = re.sub(r'[,:\s]+$', '', cand)
+        repaired = _close_containers(cand)
+        if repaired is not None:
+            return repaired
+
+    return None
+
+
+def _strip_unclosed_string(s: str) -> str:
+    """Remove a trailing unclosed string from JSON text."""
+    in_string = False
+    escaping = False
+    last_outside = 0
+    for i, ch in enumerate(s):
+        if in_string:
+            if escaping:
+                escaping = False
+            elif ch == "\\":
+                escaping = True
+            elif ch == '"':
+                in_string = False
+                last_outside = i + 1
+        else:
+            if ch == '"':
+                in_string = True
+            else:
+                last_outside = i + 1
+    return s[:last_outside] if in_string else s
+
+
+def _close_containers(s: str) -> str | None:
+    """Close unbalanced { and [ then try to parse."""
+    depth_brace = 0
+    depth_bracket = 0
+    in_str = False
+    esc = False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == '{':
+            depth_brace += 1
+        elif ch == '}':
+            depth_brace -= 1
+        elif ch == '[':
+            depth_bracket += 1
+        elif ch == ']':
+            depth_bracket -= 1
+
+    if depth_brace <= 0 and depth_bracket <= 0:
+        # Already balanced — try parsing directly
+        try:
+            json.loads(s)
+            return s
+        except json.JSONDecodeError:
+            return None
+
+    repaired = s + ']' * max(0, depth_bracket) + '}' * max(0, depth_brace)
+    try:
+        json.loads(repaired)
+        return repaired
+    except json.JSONDecodeError:
+        return None
+
 
 def _loads_answer_dict(candidate: str) -> dict[str, Any] | None:
-    """Parse one candidate string into the normalized answer structure."""
+    """Parse one candidate string into the normalized answer structure.
+
+    Tries direct parse first, then attempts truncated JSON repair.
+    """
+    # Try direct parse
+    parsed = _try_parse_json(candidate)
+    if parsed is not None:
+        return parsed
+
+    # Try repair if it looks like truncated JSON
+    repaired = _try_repair_truncated_json(candidate)
+    if repaired is not None:
+        parsed = _try_parse_json(repaired)
+        if parsed is not None:
+            return parsed
+
+    return None
+
+
+def _try_parse_json(candidate: str) -> dict[str, Any] | None:
+    """Attempt to parse candidate as JSON and validate it's an answer dict."""
     try:
         parsed = json.loads(candidate)
     except json.JSONDecodeError:
@@ -207,7 +348,7 @@ def _loads_answer_dict(candidate: str) -> dict[str, Any] | None:
 
 
 def _normalize_answer_dict(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Backfill missing keys and coerce wrong container types."""
+    """Backfill missing keys, coerce types, and filter out placeholder values."""
     result: dict[str, Any] = {
         "kv": parsed.get("kv", {}) or {},
         "entity": parsed.get("entity", []) or [],
@@ -219,6 +360,27 @@ def _normalize_answer_dict(parsed: dict[str, Any]) -> dict[str, Any]:
         result["entity"] = []
     if not isinstance(result["relation"], list):
         result["relation"] = []
+
+    # Filter out placeholder/template entries
+    result["kv"] = {
+        k: v for k, v in result["kv"].items()
+        if k not in _PLACEHOLDER_VALUES and v not in _PLACEHOLDER_VALUES
+        and str(v) not in _PLACEHOLDER_VALUES
+    }
+    result["entity"] = [
+        e for e in result["entity"]
+        if isinstance(e, dict)
+        and e.get("text") not in _PLACEHOLDER_VALUES
+        and e.get("type") not in _PLACEHOLDER_VALUES
+    ]
+    result["relation"] = [
+        r for r in result["relation"]
+        if isinstance(r, dict)
+        and r.get("head") not in _PLACEHOLDER_VALUES
+        and r.get("relation") not in _PLACEHOLDER_VALUES
+        and r.get("tail") not in _PLACEHOLDER_VALUES
+    ]
+
     return result
 
 
