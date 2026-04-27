@@ -261,6 +261,31 @@ class RLVRTrainer:
 
     # ---- loop -------------------------------------------------------
 
+    def _build_full_sequences(self, prompt_strs: list[str],
+                               completions: list[str]):
+        """Tokenize prompt+completion pairs, returning input_ids and the
+        boundary index so we can mask the prompt portion of the loss."""
+        import torch
+
+        device = next(self._policy.parameters()).device
+        all_ids: list[list[int]] = []
+        prompt_lens: list[int] = []
+
+        for prompt, comp in zip(prompt_strs, completions):
+            p_ids = self._tok.encode(prompt, add_special_tokens=False)
+            c_ids = self._tok.encode(comp, add_special_tokens=False)
+            all_ids.append(p_ids + c_ids)
+            prompt_lens.append(len(p_ids))
+
+        max_len = max(len(ids) for ids in all_ids)
+        pad_id = self._tok.pad_token_id or self._tok.eos_token_id
+        padded = [ids + [pad_id] * (max_len - len(ids)) for ids in all_ids]
+        attn = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in all_ids]
+
+        input_ids = torch.tensor(padded, device=device)
+        attention_mask = torch.tensor(attn, device=device)
+        return input_ids, attention_mask, prompt_lens
+
     def train(self) -> None:
         import torch
         from torch.optim import AdamW
@@ -275,7 +300,10 @@ class RLVRTrainer:
         opt = AdamW(self._policy.parameters(), lr=self.cfg.learning_rate)
 
         step = 0
-        for _ in range(self.cfg.num_epochs):
+        total_reward_sum = 0.0
+        total_reward_count = 0
+
+        for epoch in range(self.cfg.num_epochs):
             for start in range(0, len(prompts), self.cfg.prompt_batch_size):
                 if step >= self.cfg.total_steps:
                     break
@@ -283,8 +311,12 @@ class RLVRTrainer:
                 prompt_strs = [b["prompt"] for b in batch]
                 groups = self._sample_completions(prompt_strs)
 
+                # ---- score completions and compute advantages ----
+                flat_prompt_strs: list[str] = []
                 flat_completions: list[str] = []
                 flat_advantages: list[float] = []
+                flat_rewards: list[float] = []
+
                 for b, comps in zip(batch, groups):
                     task_type = b.get("task_type", "kv")
                     if self.cfg.reward_mode not in ("auto", task_type):
@@ -298,29 +330,94 @@ class RLVRTrainer:
                         advs = _groupwise_advantages(rewards)
                     else:
                         advs = rewards
-                    flat_completions.extend(comps)
-                    flat_advantages.extend(advs)
 
-                # Forward pass: this reference impl skips the actual PPO
-                # update for brevity (matches trl.GRPOTrainer API surface
-                # but does not reimplement its full kernel). Production
-                # runs should delegate to trl.GRPOTrainer or verl.
-                mean_r = sum(flat_advantages) / max(1, len(flat_advantages))
+                    for c, a, r in zip(comps, advs, rewards):
+                        flat_prompt_strs.append(b["prompt"])
+                        flat_completions.append(c)
+                        flat_advantages.append(a)
+                        flat_rewards.append(r)
+
+                if not flat_completions:
+                    step += 1
+                    continue
+
+                # ---- PPO-clip policy gradient update ----
+                device = next(self._policy.parameters()).device
+                adv_t = torch.tensor(flat_advantages, device=device,
+                                     dtype=torch.float32)
+
+                input_ids, attn_mask, prompt_lens = self._build_full_sequences(
+                    flat_prompt_strs, flat_completions)
+
+                # Compute old log-probs (detached) and ref log-probs
+                with torch.no_grad():
+                    old_lp = self._logprobs(self._policy, input_ids, attn_mask)
+                    ref_lp = self._logprobs(self._ref, input_ids, attn_mask)
+
+                # Mask: only compute loss on completion tokens, not prompt
+                completion_mask = torch.zeros_like(old_lp)
+                for i, plen in enumerate(prompt_lens):
+                    # _logprobs shifts by 1, so completion starts at plen-1
+                    seq_len = attn_mask[i].sum().item() - 1  # -1 for shift
+                    start_idx = max(0, plen - 1)
+                    completion_mask[i, start_idx:int(seq_len)] = 1.0
+
+                # New forward pass with gradients
+                new_lp = self._logprobs(self._policy, input_ids, attn_mask)
+
+                # Per-token PPO-clip loss, masked to completion only
+                ratio = torch.exp(new_lp - old_lp)
+                clipped = torch.clamp(ratio, 1 - self.cfg.clip_range,
+                                      1 + self.cfg.clip_range)
+                # Expand advantages to per-token
+                adv_expanded = adv_t.unsqueeze(1).expand_as(ratio)
+
+                pg_loss = -torch.minimum(
+                    ratio * adv_expanded,
+                    clipped * adv_expanded
+                )
+                kl = new_lp - ref_lp
+
+                token_loss = pg_loss + self.cfg.kl_coef * kl
+                # Apply completion mask
+                masked_loss = (token_loss * completion_mask).sum() / \
+                              completion_mask.sum().clamp(min=1.0)
+
+                opt.zero_grad()
+                masked_loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self._policy.parameters(), max_norm=1.0)
+                opt.step()
+
+                # ---- logging ----
+                mean_r = sum(flat_rewards) / max(1, len(flat_rewards))
+                total_reward_sum += sum(flat_rewards)
+                total_reward_count += len(flat_rewards)
+
                 if step % self.cfg.logging_steps == 0:
-                    logger.info("step=%d mean_adv=%.4f n=%d", step,
-                                mean_r, len(flat_advantages))
+                    logger.info(
+                        "step=%d  loss=%.4f  pg=%.4f  kl=%.4f  "
+                        "mean_reward=%.4f  n=%d",
+                        step, masked_loss.item(),
+                        pg_loss[completion_mask.bool()].mean().item(),
+                        kl[completion_mask.bool()].mean().item(),
+                        mean_r, len(flat_rewards),
+                    )
 
                 if step > 0 and step % self.cfg.save_steps == 0:
                     save_dir = Path(self.cfg.output_dir) / f"step_{step}"
                     self._policy.save_pretrained(save_dir)
                     self._tok.save_pretrained(save_dir)
+                    logger.info("checkpoint saved → %s", save_dir)
 
                 step += 1
 
         final_dir = Path(self.cfg.output_dir) / "final"
         self._policy.save_pretrained(final_dir)
         self._tok.save_pretrained(final_dir)
-        logger.info("RLVR training done → %s", final_dir)
+        avg_reward = total_reward_sum / max(1, total_reward_count)
+        logger.info("RLVR training done → %s (avg_reward=%.4f, steps=%d)",
+                    final_dir, avg_reward, step)
 
 
 def run_rlvr(config_path: str | Path) -> None:

@@ -53,6 +53,11 @@ bf16: true
 fp16: false
 flash_attn: auto
 
+# Evaluation — monitor loss to detect overfitting during mid-training.
+val_size: 0.02
+eval_strategy: steps
+eval_steps: 500
+
 # Other
 ddp_timeout: 180000000
 seed: 42
