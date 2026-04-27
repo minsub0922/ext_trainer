@@ -65,26 +65,43 @@ else
 
   case "$MODEL" in
     # --- small fine-tuned models ---
-    qwen3)           BASE="Qwen/Qwen3-0.6B";           TAG="qwen3-0.6b"       ;;
-    qwen3.5)         BASE="Qwen/Qwen3.5-0.8B";         TAG="qwen3.5-0.8b"     ;;
-    # --- baseline models (various sizes) ---
-    qwen3-1.7b)      BASE="Qwen/Qwen3-1.7B";           TAG="qwen3-1.7b"       ;;
-    qwen3-4b)        BASE="Qwen/Qwen3-4B";             TAG="qwen3-4b"         ;;
-    qwen3-8b)        BASE="Qwen/Qwen3-8B";             TAG="qwen3-8b"         ;;
-    qwen3-14b)       BASE="Qwen/Qwen3-14B";            TAG="qwen3-14b"        ;;
-    qwen3-32b)       BASE="Qwen/Qwen3-32B";            TAG="qwen3-32b"        ;;
-    qwen3.5-1.5b)    BASE="Qwen/Qwen3.5-1.5B";         TAG="qwen3.5-1.5b"     ;;
-    qwen3.5-3b)      BASE="Qwen/Qwen3.5-3B";           TAG="qwen3.5-3b"       ;;
-    qwen3.5-7b)      BASE="Qwen/Qwen3.5-7B";           TAG="qwen3.5-7b"       ;;
-    qwen3.5-14b)     BASE="Qwen/Qwen3.5-14B";          TAG="qwen3.5-14b"      ;;
-    qwen3.5-32b)     BASE="Qwen/Qwen3.5-32B";          TAG="qwen3.5-32b"      ;;
+    qwen3)            BASE="Qwen/Qwen3-0.6B";           TAG="qwen3-0.6b"       ;;
+    qwen3.5)          BASE="Qwen/Qwen3.5-0.8B";         TAG="qwen3.5-0.8b"     ;;
+    # --- Qwen3 baseline models (post-trained / instruct) ---
+    qwen3-1.7b)       BASE="Qwen/Qwen3-1.7B";           TAG="qwen3-1.7b"       ;;
+    qwen3-4b)         BASE="Qwen/Qwen3-4B";             TAG="qwen3-4b"         ;;
+    qwen3-8b)         BASE="Qwen/Qwen3-8B";             TAG="qwen3-8b"         ;;
+    qwen3-14b)        BASE="Qwen/Qwen3-14B";            TAG="qwen3-14b"        ;;
+    qwen3-30b-a3b)    BASE="Qwen/Qwen3-30B-A3B";        TAG="qwen3-30b-a3b"    ;;
+    qwen3-32b)        BASE="Qwen/Qwen3-32B";            TAG="qwen3-32b"        ;;
+    # --- Qwen3.5 baseline models (actual HF repo IDs) ---
+    qwen3.5-4b)       BASE="Qwen/Qwen3.5-4B";           TAG="qwen3.5-4b"       ;;
+    qwen3.5-9b)       BASE="Qwen/Qwen3.5-9B";           TAG="qwen3.5-9b"       ;;
+    qwen3.5-27b)      BASE="Qwen/Qwen3.5-27B";          TAG="qwen3.5-27b"      ;;
+    # --- Base (pretrain-only) variants ---
+    qwen3-8b-base)    BASE="Qwen/Qwen3-8B-Base";        TAG="qwen3-8b-base"    ;;
+    qwen3.5-9b-base)  BASE="Qwen/Qwen3.5-9B-Base";      TAG="qwen3.5-9b-base"  ;;
     *) echo "ERROR: unknown --model: $MODEL" >&2
-       echo "  Supported: qwen3, qwen3.5, qwen3-{1.7b,4b,8b,14b,32b}, qwen3.5-{1.5b,3b,7b,14b,32b}" >&2
+       echo "  Qwen3 (post-trained): qwen3, qwen3-{1.7b,4b,8b,14b,30b-a3b,32b}" >&2
+       echo "  Qwen3.5 (post-trained): qwen3.5, qwen3.5-{4b,9b,27b}" >&2
+       echo "  Base (pretrain-only): qwen3-8b-base, qwen3.5-9b-base" >&2
        echo "  Or use --model-path <HF_ID> --tag <name> for arbitrary models." >&2
        exit 2 ;;
   esac
   [[ -n "$TAG_OVERRIDE" ]] && TAG="$TAG_OVERRIDE"
 fi
+
+# ---- validate variant for larger models -------------------------------------
+# Only the small fine-tuned models (qwen3, qwen3.5) support lora/full variants.
+case "$MODEL" in
+  qwen3|qwen3.5) ;;  # fine-tuned small models: all variants OK
+  *)
+    if [[ "$VARIANT" != "base" ]]; then
+      echo "ERROR: --model $MODEL only supports --variant base (no fine-tuned checkpoint)" >&2
+      exit 2
+    fi
+    ;;
+esac
 
 # ---- resolve variant --------------------------------------------------------
 ADAPTER_FLAG=""

@@ -31,7 +31,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 MODELS="${MODELS:-qwen3 qwen3.5}"
 VARIANTS="${VARIANTS:-lora full}"
-BASELINES="${BASELINES:-qwen3-8b qwen3.5-7b}"
+BASELINES="${BASELINES:-qwen3-8b qwen3.5-4b qwen3.5-9b}"
 MODES="${MODES:-unified}"
 SKIP_BASELINES="${SKIP_BASELINES:-0}"
 SKIP_FINETUNED="${SKIP_FINETUNED:-0}"
