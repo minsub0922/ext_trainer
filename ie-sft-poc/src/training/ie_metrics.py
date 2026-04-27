@@ -80,6 +80,21 @@ def _empty_answer() -> dict[str, Any]:
     return {"kv": {}, "entity": [], "relation": []}
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    """Remove ``<think>…</think>`` blocks produced by Qwen3 thinking mode."""
+    cleaned = _THINK_RE.sub("", text).strip()
+    # Also handle unclosed <think> — take everything after it as noise.
+    if "<think>" in cleaned:
+        # Keep only content after the last </think>, or after <think> block.
+        idx = cleaned.rfind("<think>")
+        # No closing tag — discard everything from <think> onward.
+        cleaned = cleaned[:idx].strip()
+    return cleaned
+
+
 def _candidate_regions(text: str) -> list[str]:
     """Build candidate regions, prioritizing the generated answer area."""
     regions: list[str] = []
@@ -89,10 +104,17 @@ def _candidate_regions(text: str) -> list[str]:
         if candidate and candidate not in regions:
             regions.append(candidate)
 
+    # 1. Strip <think> tags first (Qwen3 thinking mode)
+    text_no_think = _strip_think_tags(text)
+    if text_no_think != text:
+        # Prioritize the cleaned version
+        add(_strip_outer_code_fence(text_no_think))
+
     add(_strip_outer_code_fence(text))
 
+    # 2. Look for "Output:" markers
     marker = "output:"
-    lowered = text.lower()
+    lowered = text_no_think.lower()
     start = 0
     marker_positions: list[int] = []
     while True:
@@ -103,7 +125,18 @@ def _candidate_regions(text: str) -> list[str]:
         start = idx + len(marker)
 
     for pos in reversed(marker_positions):
-        add(_strip_outer_code_fence(text[pos:]))
+        add(_strip_outer_code_fence(text_no_think[pos:]))
+
+    # Also search in the original text (in case think tags weren't the issue)
+    if text_no_think != text:
+        lowered_orig = text.lower()
+        start = 0
+        while True:
+            idx = lowered_orig.find(marker, start)
+            if idx == -1:
+                break
+            add(_strip_outer_code_fence(text[idx + len(marker):]))
+            start = idx + len(marker)
 
     return regions
 
