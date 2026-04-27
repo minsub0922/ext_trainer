@@ -23,11 +23,24 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
+
+
+def _is_distributed() -> bool:
+    return int(os.environ.get("WORLD_SIZE", "1")) > 1
+
+
+def _local_rank() -> int:
+    return int(os.environ.get("LOCAL_RANK", "0"))
+
+
+def _is_main_process() -> bool:
+    return int(os.environ.get("RANK", "0")) == 0
 
 
 @dataclass
@@ -168,13 +181,21 @@ class RLVRTrainer:
 
     @staticmethod
     def _load_model_with_fallback(path, dtype, attn_impl):
-        """Load model; if *attn_impl* causes an error, retry with sdpa."""
+        """Load model; if *attn_impl* causes an error, retry with sdpa.
+
+        In distributed mode, skip device_map="auto" (incompatible with DDP)
+        and let the caller place the model on the correct device.
+        """
         from transformers import AutoModelForCausalLM
+
+        # device_map="auto" is incompatible with DDP — each rank must
+        # hold the full model on its own GPU.
+        extra_kwargs = {} if _is_distributed() else {"device_map": "auto"}
 
         try:
             return AutoModelForCausalLM.from_pretrained(
                 path, torch_dtype=dtype, attn_implementation=attn_impl,
-                device_map="auto", trust_remote_code=True,
+                trust_remote_code=True, **extra_kwargs,
             )
         except (ImportError, ValueError) as exc:
             if attn_impl == "sdpa":
@@ -183,7 +204,7 @@ class RLVRTrainer:
                            attn_impl, exc)
             return AutoModelForCausalLM.from_pretrained(
                 path, torch_dtype=dtype, attn_implementation="sdpa",
-                device_map="auto", trust_remote_code=True,
+                trust_remote_code=True, **extra_kwargs,
             )
 
     def _load(self) -> None:
@@ -195,38 +216,80 @@ class RLVRTrainer:
 
         attn_impl = _detect_attn_implementation(self.cfg.attn_impl)
 
+        # ---- distributed init ----
+        if _is_distributed():
+            import torch.distributed as dist
+            if not dist.is_initialized():
+                dist.init_process_group(backend="nccl")
+            local_rank = _local_rank()
+            torch.cuda.set_device(local_rank)
+            self._device = torch.device(f"cuda:{local_rank}")
+            logger.info("[rank %d] distributed init done (world=%s)",
+                        dist.get_rank(), dist.get_world_size())
+        else:
+            self._device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu")
+
         logger.info("loading policy from %s", self.cfg.model_path)
         self._tok = AutoTokenizer.from_pretrained(self.cfg.model_path,
                                                   trust_remote_code=True)
         if self._tok.pad_token_id is None:
             self._tok.pad_token = self._tok.eos_token
 
-        self._policy = self._load_model_with_fallback(
-            self.cfg.model_path, dtype, attn_impl)
+        # In distributed mode, load to specific device instead of auto
+        if _is_distributed():
+            self._policy = self._load_model_with_fallback(
+                self.cfg.model_path, dtype, attn_impl)
+            self._policy = self._policy.to(self._device)
+        else:
+            self._policy = self._load_model_with_fallback(
+                self.cfg.model_path, dtype, attn_impl)
+
         if self.cfg.gradient_checkpointing:
             self._policy.gradient_checkpointing_enable()
 
         ref_path = self.cfg.ref_model_path or self.cfg.model_path
         logger.info("loading ref from %s", ref_path)
-        self._ref = self._load_model_with_fallback(ref_path, dtype, attn_impl)
+        if _is_distributed():
+            self._ref = self._load_model_with_fallback(
+                ref_path, dtype, attn_impl)
+            self._ref = self._ref.to(self._device)
+        else:
+            self._ref = self._load_model_with_fallback(
+                ref_path, dtype, attn_impl)
         self._ref.eval()
         for p in self._ref.parameters():
             p.requires_grad = False
 
+        # Wrap policy in DDP for gradient sync across GPUs
+        if _is_distributed():
+            from torch.nn.parallel import DistributedDataParallel as DDP
+            self._policy = DDP(self._policy,
+                               device_ids=[_local_rank()],
+                               output_device=_local_rank())
+
     # ---- sampling ---------------------------------------------------
+
+    @property
+    def _unwrapped_policy(self):
+        """Get the underlying model, unwrapping DDP if needed."""
+        if hasattr(self._policy, "module"):
+            return self._policy.module
+        return self._policy
 
     def _sample_completions(self, prompts: list[str]) -> list[list[str]]:
         """For each prompt return K completions."""
         import torch
         K = self.cfg.num_generations_per_prompt
         outputs: list[list[str]] = []
-        device = next(self._policy.parameters()).device
+        # Use unwrapped model for generate() — DDP wrapper doesn't support it
+        model = self._unwrapped_policy
         for prompt in prompts:
-            enc = self._tok(prompt, return_tensors="pt").to(device)
+            enc = self._tok(prompt, return_tensors="pt").to(self._device)
             batch = enc["input_ids"].expand(K, -1)
             attn = enc["attention_mask"].expand(K, -1)
             with torch.no_grad():
-                gen = self._policy.generate(
+                gen = model.generate(
                     input_ids=batch,
                     attention_mask=attn,
                     max_new_tokens=self.cfg.max_new_tokens,
@@ -267,7 +330,6 @@ class RLVRTrainer:
         boundary index so we can mask the prompt portion of the loss."""
         import torch
 
-        device = next(self._policy.parameters()).device
         all_ids: list[list[int]] = []
         prompt_lens: list[int] = []
 
@@ -282,8 +344,8 @@ class RLVRTrainer:
         padded = [ids + [pad_id] * (max_len - len(ids)) for ids in all_ids]
         attn = [[1] * len(ids) + [0] * (max_len - len(ids)) for ids in all_ids]
 
-        input_ids = torch.tensor(padded, device=device)
-        attention_mask = torch.tensor(attn, device=device)
+        input_ids = torch.tensor(padded, device=self._device)
+        attention_mask = torch.tensor(attn, device=self._device)
         return input_ids, attention_mask, prompt_lens
 
     def train(self) -> None:
@@ -342,8 +404,7 @@ class RLVRTrainer:
                     continue
 
                 # ---- PPO-clip policy gradient update ----
-                device = next(self._policy.parameters()).device
-                adv_t = torch.tensor(flat_advantages, device=device,
+                adv_t = torch.tensor(flat_advantages, device=self._device,
                                      dtype=torch.float32)
 
                 input_ids, attn_mask, prompt_lens = self._build_full_sequences(
@@ -405,19 +466,26 @@ class RLVRTrainer:
                     )
 
                 if step > 0 and step % self.cfg.save_steps == 0:
-                    save_dir = Path(self.cfg.output_dir) / f"step_{step}"
-                    self._policy.save_pretrained(save_dir)
-                    self._tok.save_pretrained(save_dir)
-                    logger.info("checkpoint saved → %s", save_dir)
+                    if _is_main_process():
+                        save_dir = Path(self.cfg.output_dir) / f"step_{step}"
+                        self._unwrapped_policy.save_pretrained(save_dir)
+                        self._tok.save_pretrained(save_dir)
+                        logger.info("checkpoint saved → %s", save_dir)
 
                 step += 1
 
-        final_dir = Path(self.cfg.output_dir) / "final"
-        self._policy.save_pretrained(final_dir)
-        self._tok.save_pretrained(final_dir)
-        avg_reward = total_reward_sum / max(1, total_reward_count)
-        logger.info("RLVR training done → %s (avg_reward=%.4f, steps=%d)",
-                    final_dir, avg_reward, step)
+        if _is_main_process():
+            final_dir = Path(self.cfg.output_dir) / "final"
+            self._unwrapped_policy.save_pretrained(final_dir)
+            self._tok.save_pretrained(final_dir)
+            avg_reward = total_reward_sum / max(1, total_reward_count)
+            logger.info("RLVR training done → %s (avg_reward=%.4f, steps=%d)",
+                        final_dir, avg_reward, step)
+
+        if _is_distributed():
+            import torch.distributed as dist
+            dist.barrier()
+            dist.destroy_process_group()
 
 
 def run_rlvr(config_path: str | Path) -> None:

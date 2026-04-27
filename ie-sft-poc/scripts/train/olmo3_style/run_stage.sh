@@ -55,7 +55,19 @@ echo "  CONFIG: $CONFIG"
 
 # ---- stage 4 uses custom RLVR trainer (not llamafactory-cli) ----------------
 if [[ "$STAGE" == "4" ]]; then
-  exec python -m src.training.olmo3_style.rlvr_trainer "$CONFIG"
+  setup_multigpu
+  echo "  NPROC: $NPROC"
+
+  if [[ "${NPROC:-1}" -gt 1 ]]; then
+    MASTER_PORT="${MASTER_PORT:-$(find_free_port 29500)}"
+    echo "  MASTER_PORT: $MASTER_PORT"
+    exec torchrun \
+      --nproc_per_node="$NPROC" \
+      --master_port="$MASTER_PORT" \
+      -m src.training.olmo3_style.rlvr_trainer "$CONFIG"
+  else
+    exec python -m src.training.olmo3_style.rlvr_trainer "$CONFIG"
+  fi
 fi
 
 # ---- stages 1-3 use llamafactory-cli ----------------------------------------
