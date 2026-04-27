@@ -364,8 +364,8 @@ def _normalize_answer_dict(parsed: dict[str, Any]) -> dict[str, Any]:
     # Filter out placeholder/template entries
     result["kv"] = {
         k: v for k, v in result["kv"].items()
-        if k not in _PLACEHOLDER_VALUES and v not in _PLACEHOLDER_VALUES
-        and str(v) not in _PLACEHOLDER_VALUES
+        if k not in _PLACEHOLDER_VALUES
+        and (isinstance(v, (list, dict)) or str(v) not in _PLACEHOLDER_VALUES)
     }
     result["entity"] = [
         e for e in result["entity"]
