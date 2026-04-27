@@ -19,33 +19,28 @@ PROJECT_ROOT="$(cd "${_COMMON_DIR}" && while [[ ! -f "src/common/io.py" ]] && [[
 
 # ---- find free port --------------------------------------------------------
 find_free_port() {
-  # Find an available port, starting from a base and incrementing.
-  local base="${1:-29500}"
-  local max_tries="${2:-100}"
-  local port="$base"
-  for (( i=0; i<max_tries; i++ )); do
-    if ! ss -tln 2>/dev/null | grep -q ":${port} " && \
-       ! netstat -tln 2>/dev/null | grep -q ":${port} "; then
-      # Double-check with python as a fallback
-      if python3 -c "
+  # Find an available TCP port. Pure-Python for reliability across environments.
+  # Bind-tests each port so there's no TOCTOU gap with ss/netstat.
+  python3 -c "
 import socket, sys
+base = int(sys.argv[1]) if len(sys.argv) > 1 else 29500
+for port in range(base, base + 200):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('127.0.0.1', port))
+        s.close()
+        print(port)
+        sys.exit(0)
+    except OSError:
+        try: s.close()
+        except: pass
+# fallback: let OS pick
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    s.bind(('', ${port}))
-    s.close()
-    sys.exit(0)
-except OSError:
-    s.close()
-    sys.exit(1)
-" 2>/dev/null; then
-        echo "$port"
-        return 0
-      fi
-    fi
-    port=$((port + 1))
-  done
-  # If all else fails, let the OS pick
-  python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()"
+s.bind(('', 0))
+print(s.getsockname()[1])
+s.close()
+" "${1:-29500}"
 }
 
 # ---- flash attention detection ---------------------------------------------
@@ -78,8 +73,8 @@ patch_flash_attn_in_yaml() {
     return 0
   fi
 
-  # Check if config even has flash_attn setting
-  if ! grep -qE '^\s*flash_attn\s*:' "$config" 2>/dev/null; then
+  # Check if config even has flash_attn setting that needs patching
+  if ! grep -qE '^\s*flash_attn\s*:\s*fa2' "$config" 2>/dev/null; then
     echo "$config"
     return 0
   fi
@@ -102,4 +97,19 @@ setup_multigpu() {
     fi
   fi
   export NPROC
+}
+
+# ---- multi-GPU launch helper -----------------------------------------------
+setup_distributed_env() {
+  # Export all env vars that llamafactory-cli / torchrun need for multi-GPU.
+  # Call this AFTER setup_multigpu.
+  if [[ "${NPROC:-1}" -gt 1 ]]; then
+    MASTER_PORT="${MASTER_PORT:-$(find_free_port 29500)}"
+    export FORCE_TORCHRUN=1
+    export NNODES=1
+    export NPROC_PER_NODE="$NPROC"
+    export MASTER_PORT
+    export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
+    echo "[distributed] NPROC=$NPROC MASTER_PORT=$MASTER_PORT MASTER_ADDR=$MASTER_ADDR"
+  fi
 }

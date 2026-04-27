@@ -90,10 +90,12 @@ def main() -> int:
     if args.dry_run:
         return 0
 
+    metrics_path = out_dir / "metrics.json"
     metrics_cmd = [
         sys.executable,
         str(repo_root / "scripts/eval/compute_metrics.py"),
         "--predictions", str(pred_path),
+        "--output", str(metrics_path),
     ]
     if args.task_types:
         metrics_cmd += ["--task-types", *args.task_types]
@@ -110,7 +112,7 @@ def main() -> int:
         "[%s] DONE. predictions=%s metrics=%s",
         args.scenario,
         pred_path,
-        out_dir / "metrics.json",
+        metrics_path,
     )
     return 0
 

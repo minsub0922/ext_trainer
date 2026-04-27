@@ -67,14 +67,6 @@ CONFIG="$(patch_flash_attn_in_yaml "$CONFIG")"
 # GPU setup
 setup_multigpu
 echo "  NPROC: $NPROC"
-
-if [[ "$NPROC" -gt 1 ]]; then
-  MASTER_PORT="${MASTER_PORT:-$(find_free_port 29500)}"
-  echo "  MASTER_PORT: $MASTER_PORT"
-  export FORCE_TORCHRUN=1
-  export NNODES=1
-  export NPROC_PER_NODE="$NPROC"
-  export MASTER_PORT
-fi
+setup_distributed_env
 
 exec llamafactory-cli train "$CONFIG"
