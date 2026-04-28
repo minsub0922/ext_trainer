@@ -43,6 +43,11 @@ if [[ ! -f "${DATA_DIR}/midtrain.jsonl" ]]; then
   python scripts/preprocess/olmo3_style/build_midtrain_mixture.py \
     --input  data/processed/splits/train.jsonl \
     --output "${DATA_DIR}/midtrain.jsonl"
+else
+  echo "[prep] refreshing midtrain dataset registration"
+  python scripts/preprocess/olmo3_style/build_midtrain_mixture.py \
+    --output "${DATA_DIR}/midtrain.jsonl" \
+    --register-only
 fi
 
 # ----- stage 1 ---------------------------------------------------------------

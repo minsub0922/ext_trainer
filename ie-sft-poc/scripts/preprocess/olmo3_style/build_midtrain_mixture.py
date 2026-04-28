@@ -21,6 +21,11 @@ Usage:
     python scripts/preprocess/olmo3_style/build_midtrain_mixture.py \
         --input data/processed/splits/train.jsonl \
         --output data/processed/olmo3_style/midtrain.jsonl
+
+    # Refresh dataset_info.json without rewriting midtrain.jsonl
+    python scripts/preprocess/olmo3_style/build_midtrain_mixture.py \
+        --output data/processed/olmo3_style/midtrain.jsonl \
+        --register-only
 """
 from __future__ import annotations
 
@@ -55,7 +60,6 @@ def update_dataset_info(info_path: Path, mixture_file: str) -> None:
     info["ie_midtrain"] = {
         "file_name": mixture_file,
         "columns": {"prompt": "text"},
-        "formatting": "plain",
     }
     info_path.write_text(json.dumps(info, indent=2, ensure_ascii=False),
                          encoding="utf-8")
@@ -63,14 +67,30 @@ def update_dataset_info(info_path: Path, mixture_file: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True, help="canonical JSONL")
+    ap.add_argument("--input", help="canonical JSONL")
     ap.add_argument("--output", required=True, help="midtrain JSONL out path")
+    ap.add_argument(
+        "--register-only",
+        action="store_true",
+        help="only refresh dataset_info.json for an existing midtrain file",
+    )
     args = ap.parse_args()
 
-    in_path = Path(args.input)
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.register_only:
+        if not out_path.exists():
+            raise FileNotFoundError(f"midtrain file not found: {out_path}")
+        info_path = out_path.parent / "dataset_info.json"
+        update_dataset_info(info_path, out_path.name)
+        print(f"registered `ie_midtrain` in {info_path}")
+        return
+
+    if not args.input:
+        ap.error("--input is required unless --register-only is used")
+
+    in_path = Path(args.input)
     n = 0
     with in_path.open("r", encoding="utf-8") as src, \
          out_path.open("w", encoding="utf-8") as dst:
