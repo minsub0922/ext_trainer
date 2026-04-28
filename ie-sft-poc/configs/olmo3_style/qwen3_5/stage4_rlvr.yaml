@@ -4,7 +4,7 @@ algorithm: grpo
 
 model_path: outputs/olmo3_style/qwen3.5-0.8b/stage3_dpo
 ref_model_path: outputs/olmo3_style/qwen3.5-0.8b/stage3_dpo
-tokenizer_template: qwen3_5
+tokenizer_template: qwen3_5_nothink
 
 prompts_file: data/processed/olmo3_style/rlvr_prompts.jsonl
 output_dir: outputs/olmo3_style/qwen3.5-0.8b/stage4_rlvr

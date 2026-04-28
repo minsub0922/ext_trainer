@@ -1,7 +1,7 @@
 ### OLMo3-style stage 3 DPO for Qwen3.5-0.8B. Twin of qwen3/stage3_dpo.yaml.
 
 model_name_or_path: outputs/olmo3_style/qwen3.5-0.8b/stage2_sft
-template: qwen3_5
+template: qwen3_5_nothink
 ref_model: outputs/olmo3_style/qwen3.5-0.8b/stage2_sft
 
 stage: dpo

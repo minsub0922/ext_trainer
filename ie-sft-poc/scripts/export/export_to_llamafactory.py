@@ -19,6 +19,24 @@ from src.training.dataset_registry_builder import build_dataset_info
 
 logger = get_logger(__name__)
 
+# Multimodal placeholder tokens that LLaMA-Factory's mm_plugin interprets
+# as media markers. When these appear as literal text (e.g. HTML content
+# mentioning "<video>"), they crash the tokenizer. We escape them by
+# inserting a zero-width space so they are no longer recognised as tokens.
+import re
+
+_MM_TOKEN_RE = re.compile(r"<(video|audio|image)>", re.IGNORECASE)
+
+
+def _escape_mm_tokens(text: str) -> str:
+    """Escape multimodal placeholder tokens in text content.
+
+    Inserts a zero-width space after '<' so that '<video>' becomes
+    '<\u200bvideo>' which is visually identical but not parsed as a
+    multimodal token by LLaMA-Factory's mm_plugin.
+    """
+    return _MM_TOKEN_RE.sub(r"<\u200b\1>", text)
+
 
 def build_llamafactory_record(
     record: CanonicalIERecord,
@@ -49,7 +67,9 @@ def build_llamafactory_record(
         instruction = f"{base_instruction}\n\n{schema_part}\n\n{FORMAT_INSTRUCTIONS.get(prompt_mode, FORMAT_INSTRUCTIONS['unified'])}"
 
     # Build input (text + task-specific context)
-    input_text = f"Text:\n{record.text}"
+    # Escape multimodal tokens that may appear as literal text (e.g. HTML articles)
+    safe_text = _escape_mm_tokens(record.text)
+    input_text = f"Text:\n{safe_text}"
 
     # Build output (answer as strict JSON). Answer is a plain pydantic
     # BaseModel (only CanonicalIERecord defines to_canonical_dict), so
