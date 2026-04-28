@@ -6,7 +6,7 @@
 ###
 ### Key differences vs SFT:
 ###   stage: pt          (pretrain / LM loss on packed raw text)
-###   template: none     (no chat template — raw concat)
+###   template: qwen     (registered tokenizer template; data stays raw text)
 ###   very small LR, very short (1 epoch or less)
 ###
 ### Expected dataset (see scripts/preprocess/olmo3_style/build_midtrain_mixture.py):
@@ -14,7 +14,10 @@
 ###   each line: {"text": "..."}  — schema-rendered IE records as flat text
 
 model_name_or_path: Qwen/Qwen3-0.6B
-template: none
+# LLaMA-Factory 5.x requires a registered template even for stage: pt.
+# The ie_midtrain dataset is plain {"text": ...}; this template is used for
+# tokenizer setup, not chat-formatting the raw pretraining text.
+template: qwen
 
 # Pretrain stage — no SFT loss masking; predict every token.
 stage: pt

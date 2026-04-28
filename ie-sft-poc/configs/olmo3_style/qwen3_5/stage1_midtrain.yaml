@@ -2,7 +2,10 @@
 ### See configs/olmo3_style/qwen3/stage1_midtrain.yaml for recipe notes.
 
 model_name_or_path: Qwen/Qwen3.5-0.8B
-template: none
+# LLaMA-Factory 5.x requires a registered template even for stage: pt.
+# The ie_midtrain dataset is plain {"text": ...}; this template is used for
+# tokenizer setup, not chat-formatting the raw pretraining text.
+template: qwen3_5_nothink
 
 stage: pt
 do_train: true
