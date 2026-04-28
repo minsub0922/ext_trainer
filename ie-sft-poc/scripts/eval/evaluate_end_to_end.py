@@ -95,7 +95,6 @@ def main() -> int:
         sys.executable,
         str(repo_root / "scripts/eval/compute_metrics.py"),
         "--predictions", str(pred_path),
-        "--output", str(metrics_path),
     ]
     if args.task_types:
         metrics_cmd += ["--task-types", *args.task_types]
