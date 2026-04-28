@@ -35,7 +35,8 @@ def _escape_mm_tokens(text: str) -> str:
     '<\u200bvideo>' which is visually identical but not parsed as a
     multimodal token by LLaMA-Factory's mm_plugin.
     """
-    return _MM_TOKEN_RE.sub(r"<\u200b\1>", text)
+    ZWS = "\u200b"  # actual zero-width space character
+    return _MM_TOKEN_RE.sub(rf"<{ZWS}\1>", text)
 
 
 def build_llamafactory_record(
