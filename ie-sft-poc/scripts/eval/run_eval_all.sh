@@ -32,9 +32,12 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MODELS="${MODELS:-qwen3 qwen3.5}"
 VARIANTS="${VARIANTS:-lora full}"
 BASELINES="${BASELINES:-qwen3-0.6b-base qwen3.5-0.8b-base qwen3-8b qwen3.5-4b qwen3.5-9b}"
+OLMO3_MODELS="${OLMO3_MODELS:-qwen3 qwen3.5}"
+OLMO3_STAGES="${OLMO3_STAGES:-olmo3-stage2 olmo3-stage3 olmo3-stage4}"
 MODES="${MODES:-unified}"
 SKIP_BASELINES="${SKIP_BASELINES:-0}"
 SKIP_FINETUNED="${SKIP_FINETUNED:-0}"
+SKIP_OLMO3="${SKIP_OLMO3:-0}"
 
 declare -a SKIPPED=()
 declare -a RAN=()
@@ -88,6 +91,49 @@ if [[ "$SKIP_BASELINES" != "1" ]]; then
       else
         FAILED+=("$label")
       fi
+    done
+  done
+fi
+
+# ---- OLMo3-style pipeline checkpoints ----------------------------------------
+if [[ "$SKIP_OLMO3" != "1" ]]; then
+  for model in $OLMO3_MODELS; do
+    case "$model" in
+      qwen3)   TAG="qwen3-0.6b" ;;
+      qwen3.5) TAG="qwen3.5-0.8b" ;;
+      *) echo "bad olmo3 model $model"; continue ;;
+    esac
+
+    for variant in $OLMO3_STAGES; do
+      # Resolve checkpoint path to check existence
+      case "$variant" in
+        olmo3-stage4) CKPT="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage4_rlvr/final" ;;
+        *)            stage_dir="${variant#olmo3-}"  # e.g. "stage2" "stage3"
+                      CKPT="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/${stage_dir}_$(
+                        case "$variant" in
+                          olmo3-stage1) echo "midtrain" ;;
+                          olmo3-stage2) echo "sft" ;;
+                          olmo3-stage3) echo "dpo" ;;
+                        esac
+                      )" ;;
+      esac
+
+      if [[ ! -d "$CKPT" ]]; then
+        echo "[skip] ${model}/${variant} — no checkpoint at $CKPT"
+        SKIPPED+=("${model}/${variant}")
+        continue
+      fi
+
+      for mode in $MODES; do
+        label="${model}/${variant}/${mode}"
+        echo ">>> Running $label"
+        if bash "${SCRIPT_DIR}/run_eval_scenario.sh" \
+             --model "$model" --variant "$variant" --mode "$mode"; then
+          RAN+=("$label")
+        else
+          FAILED+=("$label")
+        fi
+      done
     done
   done
 fi

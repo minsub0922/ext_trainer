@@ -94,7 +94,7 @@ else
 fi
 
 # ---- validate variant for larger models -------------------------------------
-# Only the small fine-tuned models (qwen3, qwen3.5) support lora/full variants.
+# Only the small fine-tuned models (qwen3, qwen3.5) support lora/full/olmo3 variants.
 case "$MODEL" in
   qwen3|qwen3.5) ;;  # fine-tuned small models: all variants OK
   *)
@@ -121,7 +121,20 @@ case "$VARIANT" in
     # No adapter, no local checkpoint — evaluate the pretrained model as-is.
     MODEL_PATH="$BASE"
     ;;
-  *) echo "ERROR: --variant must be lora, full, or base" >&2; exit 2 ;;
+  # --- OLMo3-style pipeline stage checkpoints ---
+  olmo3-stage1)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage1_midtrain"
+    ;;
+  olmo3-stage2)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage2_sft"
+    ;;
+  olmo3-stage3)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage3_dpo"
+    ;;
+  olmo3-stage4)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage4_rlvr/final"
+    ;;
+  *) echo "ERROR: --variant must be lora, full, base, or olmo3-stage{1,2,3,4}" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

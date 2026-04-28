@@ -47,13 +47,9 @@ def _extract_row(scenario_name: str, m: dict) -> dict:
     return row
 
 
-def _sort_key(row: dict) -> tuple:
-    """Sort: higher entity F1 first, then relation F1."""
-    return (
-        -row.get("entity_f1", 0.0),
-        -row.get("relation_f1", 0.0),
-        -row.get("kv_f1", 0.0),
-    )
+def _sort_key(row: dict) -> str:
+    """Sort by scenario name in ascending alphabetical order."""
+    return row.get("scenario", "")
 
 
 def main() -> int:
