@@ -33,6 +33,10 @@ import json
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.common.logging_utils import get_logger, setup_logging
 from src.common.paths import DATA_INTERIM, DATA_RAW, ensure_directories_exist
 from src.datasets.instructie.converter import convert_dataset, convert_file

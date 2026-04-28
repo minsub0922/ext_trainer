@@ -16,9 +16,12 @@ set -euo pipefail
 _ONESHOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${_ONESHOT_DIR}/../../.." && pwd)"
 cd "$PROJECT_ROOT"
+export IESFT_PROJECT_ROOT="$PROJECT_ROOT"
+export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 DATA_RAW="data/raw/instructie"
 DATA_CANONICAL="data/processed/canonical"
+DATA_CANONICAL_PARTS="${DATA_CANONICAL}/instructie_parts"
 DATA_UNIFIED="data/processed/unified.jsonl"
 DATA_SPLITS="data/processed/splits"
 DATA_LF="data/processed/llamafactory"
@@ -36,12 +39,17 @@ run_data_pipeline() {
   fi
 
   # 2. normalize → canonical
-  if ! have "${DATA_CANONICAL}/instructie.jsonl"; then
+  if [[ ! -s "${DATA_CANONICAL}/instructie.jsonl" ]]; then
     log "normalize InstructIE → canonical"
-    mkdir -p "${DATA_CANONICAL}"
+    mkdir -p "${DATA_CANONICAL}" "${DATA_CANONICAL_PARTS}"
     python scripts/preprocess/normalize_instructie.py \
-      --input  "${DATA_RAW}" \
-      --output "${DATA_CANONICAL}/instructie.jsonl"
+      --input-dir  "${DATA_RAW}" \
+      --output-dir "${DATA_CANONICAL_PARTS}" \
+      --overwrite
+    find "${DATA_CANONICAL_PARTS}" -maxdepth 1 -name '*.jsonl' -type f -print0 \
+      | sort -z \
+      | xargs -0 cat \
+      > "${DATA_CANONICAL}/instructie.jsonl"
   else
     log "skip normalize (canonical present)"
   fi

@@ -16,6 +16,8 @@ set -euo pipefail
 _COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Works whether sourced from scripts/ or scripts/train/ or scripts/train/olmo3_style/
 PROJECT_ROOT="$(cd "${_COMMON_DIR}" && while [[ ! -f "src/common/io.py" ]] && [[ "$(pwd)" != "/" ]]; do cd ..; done; pwd)"
+export IESFT_PROJECT_ROOT="$PROJECT_ROOT"
+export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # ---- find free port --------------------------------------------------------
 find_free_port() {
