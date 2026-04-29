@@ -47,7 +47,7 @@ fi
 bash "${SCRIPT_DIR}/run_stage.sh" --stage 2-3ep --model "$MODEL"
 
 # ----- prep 3ep preference pairs (needs stage2_sft_3ep ckpt) -----------------
-if [[ ! -f "$PREF_3EP" ]]; then
+if [[ ! -s "$PREF_3EP" ]]; then
   echo "[prep] building 3ep preference pairs"
   python scripts/preprocess/olmo3_style/build_preference_pairs.py \
     --model-path "outputs/olmo3_style/${TAG}/stage2_sft_3ep" \

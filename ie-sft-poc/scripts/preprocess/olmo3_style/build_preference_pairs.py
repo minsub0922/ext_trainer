@@ -43,6 +43,66 @@ def _build_prompt(rec: dict) -> str:
             f"Document:\n{doc}\n\nExtract as JSON:")
 
 
+def _normalize_answer(answer: dict | None) -> dict:
+    answer = answer or {}
+    return {
+        "kv": answer.get("kv") or {},
+        "entity": answer.get("entity") or [],
+        "relation": answer.get("relation") or [],
+    }
+
+
+def _infer_task_types(answer: dict) -> list[str]:
+    tasks = []
+    if answer.get("kv"):
+        tasks.append("kv")
+    if answer.get("entity"):
+        tasks.append("entity")
+    if answer.get("relation"):
+        tasks.append("relation")
+    return tasks
+
+
+def _canonical_gold(rec: dict) -> dict:
+    """Return a canonical-shaped gold record for ie_metrics.evaluate."""
+    if rec.get("answer"):
+        gold = dict(rec)
+        gold["answer"] = _normalize_answer(gold.get("answer"))
+        if not gold.get("task_types"):
+            gold["task_types"] = _infer_task_types(gold["answer"])
+        return gold
+
+    # Legacy fallback for older generated/intermediate files.
+    answer = _normalize_answer(
+        rec.get("records") or rec.get("output") or rec.get("target") or {}
+    )
+    gold = dict(rec)
+    gold["answer"] = answer
+    gold["task_types"] = rec.get("task_types") or _infer_task_types(answer)
+    return gold
+
+
+def _primary_task_type(rec: dict) -> str:
+    """Pick one task to score for pair ranking.
+
+    Relation extraction is the most specific signal when present; entity is
+    next; kv is used for KV-only records.
+    """
+    answer = _normalize_answer(rec.get("answer"))
+    if answer["relation"]:
+        return "relation"
+    if answer["entity"]:
+        return "entity"
+    if answer["kv"]:
+        return "kv"
+
+    task_types = rec.get("task_types") or []
+    for task in ("relation", "entity", "kv"):
+        if task in task_types:
+            return task
+    return "kv"
+
+
 def _sample_k(model, tok, prompt: str, k: int, temperature: float,
               max_new_tokens: int, device) -> list[str]:
     import torch
@@ -91,7 +151,11 @@ def main() -> None:
     info_path = out.parent / "dataset_info.json"
 
     def register_dataset() -> None:
-        info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
+        info = (
+            json.loads(info_path.read_text(encoding="utf-8"))
+            if info_path.exists()
+            else {}
+        )
         info[args.dataset_name] = {
             "file_name": out.name,
             "ranking": True,
@@ -103,8 +167,10 @@ def main() -> None:
         print(f"registered `{args.dataset_name}` in {info_path}")
 
     if args.register_only:
-        if not out.exists():
-            raise FileNotFoundError(f"preference pairs file not found: {out}")
+        if not out.exists() or out.stat().st_size == 0:
+            raise FileNotFoundError(
+                f"non-empty preference pairs file not found: {out}"
+            )
         register_dataset()
         return
 
@@ -162,18 +228,27 @@ def main() -> None:
             prompt = _build_prompt(rec)
             samples = _sample_k(model, tok, prompt, args.k, args.temperature,
                                 args.max_new_tokens, device)
+            gold = _canonical_gold(rec)
             yield {
                 "prompt": prompt,
                 "instruction": prompt,
                 "input": "",
-                "gold": rec.get("records") or rec.get("output") or {},
-                "task_type": rec.get("task_type") or rec.get("task") or "kv",
+                "gold": gold,
+                "task_type": rec.get("task_type") or rec.get("task") or _primary_task_type(gold),
                 "samples": samples,
             }
             n += 1
 
     cfg = PairBuilderConfig(min_margin=args.min_margin)
     pairs = build_preference_pairs(gen_group(), cfg)
+    if not pairs:
+        if out.exists():
+            out.unlink()
+        raise RuntimeError(
+            "No preference pairs were generated. Check that the input split is "
+            "canonical with non-empty answer/task_types, or retry with a lower "
+            "--min-margin after inspecting model samples."
+        )
     out = write_pairs_jsonl(pairs, args.output)
 
     # Register in dataset_info.json

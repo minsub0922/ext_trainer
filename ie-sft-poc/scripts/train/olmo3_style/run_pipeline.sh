@@ -57,13 +57,18 @@ bash "${SCRIPT_DIR}/run_stage.sh" --stage 1 --model "$MODEL"
 bash "${SCRIPT_DIR}/run_stage.sh" --stage 2 --model "$MODEL"
 
 # ----- prep preference pairs (needs stage-2 ckpt) ----------------------------
-if [[ ! -f "${DATA_DIR}/preference_pairs.jsonl" ]]; then
+if [[ ! -s "${DATA_DIR}/preference_pairs.jsonl" ]]; then
   echo "[prep] building preference pairs"
   python scripts/preprocess/olmo3_style/build_preference_pairs.py \
     --model-path "outputs/olmo3_style/${TAG}/stage2_sft" \
     --test data/processed/splits/train.jsonl \
     --output "${DATA_DIR}/preference_pairs.jsonl" \
     --k 4 --limit 2000
+else
+  echo "[prep] found existing preference pairs: ${DATA_DIR}/preference_pairs.jsonl"
+  python scripts/preprocess/olmo3_style/build_preference_pairs.py \
+    --output "${DATA_DIR}/preference_pairs.jsonl" \
+    --register-only
 fi
 
 # ----- stage 3 ---------------------------------------------------------------
