@@ -6,9 +6,10 @@ Launchers for the OLMo3-style training recipe (mid-train → SFT → DPO → RLV
 
 | Script | Stage | What it does |
 | --- | --- | --- |
-| `run_stage.sh` | 1–4 | **Unified stage launcher.** `--stage {1\|2\|3\|4} --model {qwen3\|qwen3.5}`. Handles flash-attn detection, dynamic port, multi-GPU via `llamafactory-cli`. |
+| `run_stage.sh` | 1–4 | **Unified stage launcher.** `--stage {1\|2\|2-3ep\|3\|4} --model {qwen3\|qwen3.5}`. Handles flash-attn detection, dynamic port, multi-GPU via `llamafactory-cli`. |
 | `run_stage1_midtrain.sh` | 1 | Thin wrapper → `run_stage.sh --stage 1`. |
 | `run_stage2_sft.sh` | 2 | Thin wrapper → `run_stage.sh --stage 2`. |
+| `run_stage2_sft_3ep.sh` | 2 | Thin wrapper → `run_stage.sh --stage 2-3ep`; keeps stage 1 fixed and trains stage 2 for 3 epochs. |
 | `run_stage3_dpo.sh` | 3 | Thin wrapper → `run_stage.sh --stage 3`. |
 | `run_stage4_rlvr.sh` | 4 | Thin wrapper → `run_stage.sh --stage 4`. |
 | `run_pipeline.sh` | all | **Unified pipeline.** `--model {qwen3\|qwen3.5}`. Runs data prep + stages 1–4. |
@@ -71,6 +72,13 @@ Iterating on a single stage (e.g. tweaking DPO hyperparams):
 
 ```bash
 MODEL=qwen3 NPROC=4 bash scripts/train/olmo3_style/run_stage3_dpo.sh
+```
+
+Running the 3-epoch stage-2 SFT ablation:
+
+```bash
+MODEL=qwen3   NPROC=4 bash scripts/train/olmo3_style/run_stage2_sft_3ep.sh
+MODEL=qwen3.5 NPROC=4 bash scripts/train/olmo3_style/run_stage2_sft_3ep.sh
 ```
 
 Rebuilding preference pairs after a stage-2 retrain:

@@ -1,0 +1,46 @@
+### OLMo3-style stage 2 SFT for Qwen3.5-0.8B, 3-epoch ablation.
+###
+### Same as stage2_sft.yaml except num_train_epochs/output_dir. This keeps
+### stage 1 mid-training fixed while matching the LoRA SFT epoch count.
+
+model_name_or_path: outputs/olmo3_style/qwen3.5-0.8b/stage1_midtrain
+template: qwen3_5_nothink
+
+stage: sft
+do_train: true
+finetuning_type: full
+
+deepspeed: configs/sft/deepspeed_z2.json
+
+dataset: ie_sft_unified
+dataset_dir: data/processed/llamafactory
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+output_dir: outputs/olmo3_style/qwen3.5-0.8b/stage2_sft_3ep
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 2.0e-5
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+bf16: true
+fp16: false
+flash_attn: auto
+
+val_size: 0.05
+eval_strategy: steps
+eval_steps: 500
+
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard
