@@ -380,24 +380,33 @@ def _sanitize_template_noise(text: str) -> str:
 def _loads_answer_dict(candidate: str) -> dict[str, Any] | None:
     """Parse one candidate string into the normalized answer structure.
 
-    Tries direct parse first, then sanitizes template noise, then
-    attempts truncated JSON repair.
+    Tries direct parse first, then truncated JSON repair, and only
+    applies template noise sanitization as a LAST RESORT to avoid
+    destructively modifying already-parseable outputs from fine-tuned models.
     """
     # Try direct parse
     parsed = _try_parse_json(candidate)
     if parsed is not None:
         return parsed
 
-    # Try after sanitizing template noise (base model echo patterns)
+    # Try repair if it looks like truncated JSON
+    repaired = _try_repair_truncated_json(candidate)
+    if repaired is not None:
+        parsed = _try_parse_json(repaired)
+        if parsed is not None:
+            return parsed
+
+    # LAST RESORT: sanitize template noise (base model echo patterns)
+    # Only apply if direct parse and repair both failed — this avoids
+    # destructively modifying fine-tuned model outputs that use
+    # "field_name" as a literal key in their JSON.
     sanitized = _sanitize_template_noise(candidate)
     if sanitized != candidate:
         parsed = _try_parse_json(sanitized)
         if parsed is not None:
             return parsed
-
-    # Try repair if it looks like truncated JSON
-    for text in (sanitized, candidate):
-        repaired = _try_repair_truncated_json(text)
+        # Also try repair on sanitized version
+        repaired = _try_repair_truncated_json(sanitized)
         if repaired is not None:
             parsed = _try_parse_json(repaired)
             if parsed is not None:
