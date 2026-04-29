@@ -16,6 +16,7 @@ Launchers for the OLMo3-style training recipe (mid-train → SFT → DPO → RLV
 | `run_stage4_rlvr_3ep.sh` | 4 | Thin wrapper → `run_stage.sh --stage 4-3ep`; RLVR branch after stage2 3ep. |
 | `run_pipeline.sh` | all | **Unified pipeline.** `--model {qwen3\|qwen3.5}`. Runs data prep + stages 1–4. |
 | `run_pipeline_stage2_3ep.sh` | 2–4 | Continues from an existing stage-1 checkpoint, then runs the separated 3ep branch through stage 4. |
+| `run_pipeline_from_stage3.sh` | 3–4 | Resumes from an existing stage-2 checkpoint. `--stage2 {2ep\|3ep}` chooses `stage2_sft` vs `stage2_sft_3ep`; add `--stage3-only` to stop after DPO. |
 | `run_pipeline_qwen3.sh` | all | Thin wrapper → `run_pipeline.sh --model qwen3`. |
 | `run_pipeline_qwen35.sh` | all | Thin wrapper → `run_pipeline.sh --model qwen3.5`. |
 | `run_oneshot_qwen3.sh` | all + base prep | Runs base data pipeline then `run_pipeline.sh --model qwen3`. |
@@ -90,6 +91,19 @@ Continuing the separated 3ep branch from an already-trained stage 1:
 ```bash
 bash scripts/train/olmo3_style/run_pipeline_stage2_3ep_qwen3.sh
 bash scripts/train/olmo3_style/run_pipeline_stage2_3ep_qwen35.sh
+```
+
+Starting from stage 3 after stage 2 is already trained:
+
+```bash
+# default stage2 branch (2 epochs): stage2_sft -> stage3_dpo -> stage4_rlvr
+MODEL=qwen3 NPROC=4 bash scripts/train/olmo3_style/run_pipeline_from_stage3.sh --stage2 2ep
+
+# 3-epoch stage2 branch: stage2_sft_3ep -> stage3_dpo_3ep -> stage4_rlvr_3ep
+MODEL=qwen3 NPROC=4 bash scripts/train/olmo3_style/run_pipeline_from_stage3.sh --stage2 3ep
+
+# only rebuild/register preference pairs and run DPO
+MODEL=qwen3 NPROC=4 bash scripts/train/olmo3_style/run_pipeline_from_stage3.sh --stage2 3ep --stage3-only
 ```
 
 Rebuilding preference pairs after a stage-2 retrain:

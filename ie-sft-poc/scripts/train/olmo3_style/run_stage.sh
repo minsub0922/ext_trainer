@@ -59,7 +59,7 @@ echo "=== Stage $STAGE ${STAGE_NAME} ($MODEL) ==="
 echo "  CONFIG: $CONFIG"
 
 # ---- stage 4 uses custom RLVR trainer (not llamafactory-cli) ----------------
-if [[ "$STAGE" == "4" ]]; then
+if [[ "$STAGE" == "4" || "$STAGE" == "4-3ep" ]]; then
   setup_multigpu
   echo "  NPROC: $NPROC"
 
