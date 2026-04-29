@@ -147,13 +147,19 @@ def generate_batch(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
+    use_chat_template: bool = True,
 ) -> list[str]:
     """Run generation on a list of prompts and return decoded completions."""
     import torch
 
     device = next(model.parameters()).device
+    generation_prompts = (
+        [_format_generation_prompt(tok, prompt) for prompt in prompts]
+        if use_chat_template
+        else prompts
+    )
     enc = tok(
-        prompts,
+        generation_prompts,
         return_tensors="pt",
         padding=True,
         truncation=True,
@@ -169,6 +175,7 @@ def generate_batch(
             temperature=temperature if do_sample else 1.0,
             top_p=top_p if do_sample else 1.0,
             pad_token_id=tok.pad_token_id,
+            eos_token_id=getattr(tok, "eos_token_id", None),
         )
 
     # Decode only the newly generated tokens. With left padding, the prompt
@@ -180,6 +187,30 @@ def generate_batch(
         gen_ids = full_ids[input_width:]
         completions.append(tok.decode(gen_ids, skip_special_tokens=True))
     return completions
+
+
+def _format_generation_prompt(tok, prompt: str) -> str:
+    """Apply tokenizer chat template when available, otherwise use raw prompt."""
+    if not hasattr(tok, "apply_chat_template") or not getattr(tok, "chat_template", None):
+        return prompt
+
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        return tok.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+    except TypeError:
+        return tok.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    except Exception as exc:
+        logger.warning("Could not apply tokenizer chat template (%s); using raw prompt", exc)
+        return prompt
 
 
 def main() -> int:
@@ -210,6 +241,11 @@ def main() -> int:
         help="Only run on the first N records (0 = all). Default 200 for speed.",
     )
     p.add_argument("--dry-run", action="store_true", help="Print config and exit")
+    p.add_argument(
+        "--no-chat-template",
+        action="store_true",
+        help="Do not wrap eval prompts with tokenizer.apply_chat_template.",
+    )
     args = p.parse_args()
 
     in_path = Path(args.input)
@@ -248,6 +284,7 @@ def main() -> int:
             args.max_new_tokens,
             args.temperature,
             args.top_p,
+            use_chat_template=not args.no_chat_template,
         )
         for rec, prompt, pred in zip(records[start:end], batch_prompts, completions):
             outputs.append(

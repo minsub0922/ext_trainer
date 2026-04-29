@@ -24,6 +24,7 @@ assert _SPEC is not None and _SPEC.loader is not None
 sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 generate_batch = _MODULE.generate_batch
+format_generation_prompt = _MODULE._format_generation_prompt
 
 
 class _NoGrad:
@@ -80,6 +81,23 @@ class _FakeTokenizer:
         return " ".join(token_ids)
 
 
+class _FakeChatTokenizer(_FakeTokenizer):
+    chat_template = "fake"
+
+    def __init__(self):
+        self.seen_prompts = []
+
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs["tokenize"] is False
+        assert kwargs["add_generation_prompt"] is True
+        assert kwargs["enable_thinking"] is False
+        return f"<user>{messages[0]['content']}</user><assistant>"
+
+    def __call__(self, prompts, **kwargs):
+        self.seen_prompts = prompts
+        return super().__call__(prompts, **kwargs)
+
+
 class _FakeModel:
     def parameters(self):
         return iter([_FakeParam()])
@@ -107,3 +125,27 @@ def test_generate_batch_slices_after_padded_input_width(monkeypatch):
     )
 
     assert completions == ["answer-a", "answer-b"]
+
+
+def test_generate_batch_applies_chat_template_when_available(monkeypatch):
+    fake_torch = types.SimpleNamespace(no_grad=lambda: _NoGrad())
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    tok = _FakeChatTokenizer()
+
+    completions = generate_batch(
+        _FakeModel(),
+        tok,
+        ["extract this"],
+        max_new_tokens=8,
+        temperature=0.0,
+        top_p=1.0,
+    )
+
+    assert tok.seen_prompts == ["<user>extract this</user><assistant>"]
+    assert completions == ["answer-a", "answer-b"]
+
+
+def test_format_generation_prompt_falls_back_without_chat_template():
+    tok = _FakeTokenizer()
+
+    assert format_generation_prompt(tok, "raw prompt") == "raw prompt"
