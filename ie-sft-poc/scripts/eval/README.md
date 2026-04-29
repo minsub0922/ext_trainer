@@ -13,7 +13,7 @@ quality: KV field F1, entity (type, text) set F1, and relation triple F1.
 | `evaluate_end_to_end.py` | Runs predict + metrics back-to-back. |
 | `run_eval_scenario.sh` | Thin bash dispatcher. Parametrized by `--model / --variant / --mode`. |
 | `run_eval_{qwen3,qwen35}_{lora,full}.sh` | Wrappers for each model x variant. |
-| `run_eval_{qwen3,qwen35}_olmo3_stage2_3ep.sh` | Wrappers for the OLMo3-style stage-2 3-epoch ablation. |
+| `run_eval_{qwen3,qwen35}_olmo3_stage{2,3,4}_3ep.sh` | Wrappers for the separated OLMo3-style branch after stage-2 3ep. |
 | `run_eval_qwen3_8b_base.sh` | Wrapper for `Qwen/Qwen3-8B-Base`. |
 | `run_eval_qwen35_9b_base.sh` | Wrapper for `Qwen/Qwen3.5-9B-Base`. |
 | `run_eval_all.sh` | Sweeps the full matrix and skips missing checkpoints. |
@@ -39,6 +39,10 @@ LIMIT=50 MODE=relation bash scripts/eval/run_eval_qwen35_full.sh
 # OLMo3-style stage 2, 3-epoch ablation
 bash scripts/eval/run_eval_qwen3_olmo3_stage2_3ep.sh
 bash scripts/eval/run_eval_qwen35_olmo3_stage2_3ep.sh
+bash scripts/eval/run_eval_qwen3_olmo3_stage3_3ep.sh
+bash scripts/eval/run_eval_qwen35_olmo3_stage3_3ep.sh
+bash scripts/eval/run_eval_qwen3_olmo3_stage4_3ep.sh
+bash scripts/eval/run_eval_qwen35_olmo3_stage4_3ep.sh
 
 # Base models
 bash scripts/eval/run_eval_qwen3_8b_base.sh

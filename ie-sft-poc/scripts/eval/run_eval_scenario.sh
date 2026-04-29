@@ -134,10 +134,16 @@ case "$VARIANT" in
   olmo3-stage3)
     MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage3_dpo"
     ;;
+  olmo3-stage3-3ep)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage3_dpo_3ep"
+    ;;
   olmo3-stage4)
     MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage4_rlvr/final"
     ;;
-  *) echo "ERROR: --variant must be lora, full, base, olmo3-stage2-3ep, or olmo3-stage{1,2,3,4}" >&2; exit 2 ;;
+  olmo3-stage4-3ep)
+    MODEL_PATH="${PROJECT_ROOT}/outputs/olmo3_style/${TAG}/stage4_rlvr_3ep/final"
+    ;;
+  *) echo "ERROR: --variant must be lora, full, base, olmo3-stage{1,2,3,4}, or olmo3-stage{2,3,4}-3ep" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

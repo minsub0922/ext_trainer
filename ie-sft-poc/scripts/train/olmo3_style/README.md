@@ -6,13 +6,16 @@ Launchers for the OLMo3-style training recipe (mid-train → SFT → DPO → RLV
 
 | Script | Stage | What it does |
 | --- | --- | --- |
-| `run_stage.sh` | 1–4 | **Unified stage launcher.** `--stage {1\|2\|2-3ep\|3\|4} --model {qwen3\|qwen3.5}`. Handles flash-attn detection, dynamic port, multi-GPU via `llamafactory-cli`. |
+| `run_stage.sh` | 1–4 | **Unified stage launcher.** `--stage {1\|2\|2-3ep\|3\|3-3ep\|4\|4-3ep} --model {qwen3\|qwen3.5}`. Handles flash-attn detection, dynamic port, multi-GPU via `llamafactory-cli`. |
 | `run_stage1_midtrain.sh` | 1 | Thin wrapper → `run_stage.sh --stage 1`. |
 | `run_stage2_sft.sh` | 2 | Thin wrapper → `run_stage.sh --stage 2`. |
 | `run_stage2_sft_3ep.sh` | 2 | Thin wrapper → `run_stage.sh --stage 2-3ep`; keeps stage 1 fixed and trains stage 2 for 3 epochs. |
 | `run_stage3_dpo.sh` | 3 | Thin wrapper → `run_stage.sh --stage 3`. |
+| `run_stage3_dpo_3ep.sh` | 3 | Thin wrapper → `run_stage.sh --stage 3-3ep`; DPO branch after stage2 3ep. |
 | `run_stage4_rlvr.sh` | 4 | Thin wrapper → `run_stage.sh --stage 4`. |
+| `run_stage4_rlvr_3ep.sh` | 4 | Thin wrapper → `run_stage.sh --stage 4-3ep`; RLVR branch after stage2 3ep. |
 | `run_pipeline.sh` | all | **Unified pipeline.** `--model {qwen3\|qwen3.5}`. Runs data prep + stages 1–4. |
+| `run_pipeline_stage2_3ep.sh` | 2–4 | Continues from an existing stage-1 checkpoint, then runs the separated 3ep branch through stage 4. |
 | `run_pipeline_qwen3.sh` | all | Thin wrapper → `run_pipeline.sh --model qwen3`. |
 | `run_pipeline_qwen35.sh` | all | Thin wrapper → `run_pipeline.sh --model qwen3.5`. |
 | `run_oneshot_qwen3.sh` | all + base prep | Runs base data pipeline then `run_pipeline.sh --model qwen3`. |
@@ -53,11 +56,12 @@ The stage scripts assume the following files exist. `run_pipeline_*.sh` builds a
 | `data/processed/llamafactory/*.jsonl` + `dataset_info.json` | `scripts/export/export_to_llamafactory.py` | stage 2 (via `dataset: ie_sft_unified`) |
 | `data/processed/olmo3_style/midtrain.jsonl` | `scripts/preprocess/olmo3_style/build_midtrain_mixture.py` | stage 1 |
 | `data/processed/olmo3_style/preference_pairs.jsonl` | `scripts/preprocess/olmo3_style/build_preference_pairs.py` (needs stage-2 ckpt) | stage 3 |
+| `data/processed/olmo3_style/preference_pairs_3ep.jsonl` | `scripts/preprocess/olmo3_style/build_preference_pairs.py` (needs stage2_sft_3ep ckpt) | stage 3 3ep branch |
 | `data/processed/olmo3_style/rlvr_prompts.jsonl` | `scripts/preprocess/olmo3_style/build_rlvr_prompts.py` | stage 4 |
 
 ## Output layout
 
-All checkpoints land under `outputs/olmo3_style/<tag>/stageN_*/`, where `<tag>` is e.g. `qwen3-0.6b` or `qwen3.5-…`. Each stage reads the previous stage's output dir from its config's `model_name_or_path` field — edit the YAML if you want to skip a stage or point at a different starting model.
+All checkpoints land under `outputs/olmo3_style/<tag>/stageN_*/`, where `<tag>` is e.g. `qwen3-0.6b` or `qwen3.5-…`. The 3ep branch writes to `stage2_sft_3ep`, `stage3_dpo_3ep`, and `stage4_rlvr_3ep` so it can be compared with the default branch. Each stage reads the previous stage's output dir from its config's `model_name_or_path` field — edit the YAML if you want to skip a stage or point at a different starting model.
 
 ## Typical runbook
 
@@ -79,6 +83,13 @@ Running the 3-epoch stage-2 SFT ablation:
 ```bash
 MODEL=qwen3   NPROC=4 bash scripts/train/olmo3_style/run_stage2_sft_3ep.sh
 MODEL=qwen3.5 NPROC=4 bash scripts/train/olmo3_style/run_stage2_sft_3ep.sh
+```
+
+Continuing the separated 3ep branch from an already-trained stage 1:
+
+```bash
+bash scripts/train/olmo3_style/run_pipeline_stage2_3ep_qwen3.sh
+bash scripts/train/olmo3_style/run_pipeline_stage2_3ep_qwen35.sh
 ```
 
 Rebuilding preference pairs after a stage-2 retrain:

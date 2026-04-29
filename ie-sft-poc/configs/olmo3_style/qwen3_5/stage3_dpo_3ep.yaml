@@ -1,0 +1,48 @@
+### OLMo3-style stage 3 DPO for Qwen3.5-0.8B after stage2_sft_3ep.
+
+model_name_or_path: outputs/olmo3_style/qwen3.5-0.8b/stage2_sft_3ep
+template: qwen3_5_nothink
+ref_model: outputs/olmo3_style/qwen3.5-0.8b/stage2_sft_3ep
+
+stage: dpo
+do_train: true
+finetuning_type: full
+
+pref_beta: 0.1
+pref_loss: sigmoid
+pref_ftx: 0.0
+
+deepspeed: configs/sft/deepspeed_z3.json
+
+dataset: ie_pref_pairs_3ep
+dataset_dir: data/processed/olmo3_style
+cutoff_len: 2048
+preprocessing_num_workers: 4
+
+output_dir: outputs/olmo3_style/qwen3.5-0.8b/stage3_dpo_3ep
+logging_steps: 10
+save_steps: 200
+save_total_limit: 2
+
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 16
+learning_rate: 5.0e-7
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+bf16: true
+fp16: false
+flash_attn: auto
+
+val_size: 0.05
+eval_strategy: steps
+eval_steps: 200
+
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard

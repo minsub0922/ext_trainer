@@ -25,11 +25,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
-
-from training.olmo3_style.preference_builder import (  # noqa: E402
-    PairBuilderConfig, build_preference_pairs, write_pairs_jsonl,
-)
+sys.path.insert(0, str(ROOT))
 
 
 def _iter_canonical(path: Path):
@@ -69,17 +65,57 @@ def _sample_k(model, tok, prompt: str, k: int, temperature: float,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model-path", required=True)
-    ap.add_argument("--test", required=True,
+    ap.add_argument("--model-path")
+    ap.add_argument("--test",
                     help="canonical train/dev JSONL to draw prompts from")
     ap.add_argument("--output", required=True)
+    ap.add_argument(
+        "--dataset-name",
+        default="ie_pref_pairs",
+        help="dataset_info.json key to register (default: ie_pref_pairs)",
+    )
     ap.add_argument("--k", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--max-new-tokens", type=int, default=512)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--min-margin", type=float, default=0.15)
     ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp16", "fp32"])
+    ap.add_argument(
+        "--register-only",
+        action="store_true",
+        help="only refresh dataset_info.json for an existing pairs file",
+    )
     args = ap.parse_args()
+
+    out = Path(args.output)
+    info_path = out.parent / "dataset_info.json"
+
+    def register_dataset() -> None:
+        info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
+        info[args.dataset_name] = {
+            "file_name": out.name,
+            "ranking": True,
+            "columns": {"prompt": "instruction", "query": "input",
+                        "response": "output"},
+        }
+        info_path.write_text(json.dumps(info, indent=2, ensure_ascii=False),
+                             encoding="utf-8")
+        print(f"registered `{args.dataset_name}` in {info_path}")
+
+    if args.register_only:
+        if not out.exists():
+            raise FileNotFoundError(f"preference pairs file not found: {out}")
+        register_dataset()
+        return
+
+    if not args.model_path or not args.test:
+        ap.error("--model-path and --test are required unless --register-only is used")
+
+    from src.training.olmo3_style.preference_builder import (  # noqa: E402
+        PairBuilderConfig,
+        build_preference_pairs,
+        write_pairs_jsonl,
+    )
 
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -141,16 +177,7 @@ def main() -> None:
     out = write_pairs_jsonl(pairs, args.output)
 
     # Register in dataset_info.json
-    info_path = out.parent / "dataset_info.json"
-    info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
-    info["ie_pref_pairs"] = {
-        "file_name": out.name,
-        "ranking": True,
-        "columns": {"prompt": "instruction", "query": "input",
-                    "response": "output"},
-    }
-    info_path.write_text(json.dumps(info, indent=2, ensure_ascii=False),
-                         encoding="utf-8")
+    register_dataset()
     print(f"wrote {len(pairs)} pairs → {out}")
 
 

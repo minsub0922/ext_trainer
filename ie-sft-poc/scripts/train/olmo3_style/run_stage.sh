@@ -6,6 +6,7 @@
 #   MODEL=qwen3 bash scripts/train/olmo3_style/run_stage.sh --stage 1
 #   MODEL=qwen3.5 bash scripts/train/olmo3_style/run_stage.sh --stage 2
 #   MODEL=qwen3 bash scripts/train/olmo3_style/run_stage.sh --stage 2-3ep
+#   MODEL=qwen3 bash scripts/train/olmo3_style/run_stage.sh --stage 3-3ep
 #   bash scripts/train/olmo3_style/run_stage.sh --stage 3 --model qwen3
 #   bash scripts/train/olmo3_style/run_stage.sh --stage 4 --model qwen3
 #
@@ -32,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$STAGE" ]] && { echo "ERROR: --stage {1|2|2-3ep|3|4} required" >&2; exit 2; }
+[[ -z "$STAGE" ]] && { echo "ERROR: --stage {1|2|2-3ep|3|3-3ep|4|4-3ep} required" >&2; exit 2; }
 
 # ---- resolve config ---------------------------------------------------------
 case "$MODEL" in
@@ -46,8 +47,10 @@ case "$STAGE" in
   2) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage2_sft.yaml"      ; STAGE_NAME="SFT" ;;
   2-3ep) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage2_sft_3ep.yaml" ; STAGE_NAME="SFT (3 epochs)" ;;
   3) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage3_dpo.yaml"      ; STAGE_NAME="DPO" ;;
+  3-3ep) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage3_dpo_3ep.yaml" ; STAGE_NAME="DPO (stage2 3 epochs)" ;;
   4) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage4_rlvr.yaml"     ; STAGE_NAME="RLVR" ;;
-  *) echo "ERROR: invalid stage $STAGE (use 1, 2, 2-3ep, 3, or 4)" >&2; exit 2 ;;
+  4-3ep) CONFIG="configs/olmo3_style/${MODEL_DIR}/stage4_rlvr_3ep.yaml" ; STAGE_NAME="RLVR (stage2 3 epochs)" ;;
+  *) echo "ERROR: invalid stage $STAGE (use 1, 2, 2-3ep, 3, 3-3ep, 4, or 4-3ep)" >&2; exit 2 ;;
 esac
 
 [[ ! -f "$CONFIG" ]] && { echo "ERROR: config not found: $CONFIG" >&2; exit 1; }
