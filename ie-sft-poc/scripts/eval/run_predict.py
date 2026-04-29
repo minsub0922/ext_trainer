@@ -171,11 +171,13 @@ def generate_batch(
             pad_token_id=tok.pad_token_id,
         )
 
-    # Decode only the newly generated tokens.
-    input_lens = enc["attention_mask"].sum(dim=1).tolist()
+    # Decode only the newly generated tokens. With left padding, the prompt
+    # occupies the full padded input width in `out`; using attention_mask.sum()
+    # would leak the tail of shorter prompts into the decoded completion.
+    input_width = enc["input_ids"].shape[1]
     completions: list[str] = []
-    for i, full_ids in enumerate(out):
-        gen_ids = full_ids[input_lens[i] :]
+    for full_ids in out:
+        gen_ids = full_ids[input_width:]
         completions.append(tok.decode(gen_ids, skip_special_tokens=True))
     return completions
 
