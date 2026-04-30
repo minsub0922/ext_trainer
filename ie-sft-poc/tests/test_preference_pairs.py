@@ -19,6 +19,11 @@ _SPEC.loader.exec_module(_MODULE)
 _canonical_gold = _MODULE._canonical_gold
 _primary_task_type = _MODULE._primary_task_type
 
+from src.training.olmo3_style.preference_builder import (  # noqa: E402
+    PairBuilderConfig,
+    build_preference_pairs,
+)
+
 
 def test_canonical_gold_preserves_answer_and_task_types():
     rec = {
@@ -74,3 +79,62 @@ def test_canonical_gold_infers_legacy_answer_shape():
         "relation": [],
     }
     assert gold["task_types"] == ["entity"]
+
+
+def test_build_preference_pairs_uses_gold_fallback_when_samples_tie():
+    gold = {
+        "answer": {
+            "kv": {"name": "Alice"},
+            "entity": [],
+            "relation": [],
+        },
+        "task_types": ["kv"],
+    }
+    groups = [{
+        "instruction": "Extract as JSON",
+        "input": "",
+        "gold": gold,
+        "task_type": "kv",
+        "samples": ["not json", "{}"],
+    }]
+
+    def scorer(prediction, _gold, _task_type):
+        return 1.0 if '"name": "Alice"' in prediction else 0.0
+
+    pairs = build_preference_pairs(
+        groups,
+        PairBuilderConfig(min_margin=0.15, allow_gold_fallback=True),
+        scorer=scorer,
+    )
+
+    assert len(pairs) == 1
+    assert pairs[0]["output"][0] == (
+        '{"kv": {"name": "Alice"}, "entity": [], "relation": []}'
+    )
+    assert pairs[0]["metadata"]["fallback"] == "gold_answer"
+
+
+def test_build_preference_pairs_can_disable_gold_fallback():
+    gold = {
+        "answer": {
+            "kv": {"name": "Alice"},
+            "entity": [],
+            "relation": [],
+        },
+        "task_types": ["kv"],
+    }
+    groups = [{
+        "instruction": "Extract as JSON",
+        "input": "",
+        "gold": gold,
+        "task_type": "kv",
+        "samples": ["not json", "{}"],
+    }]
+
+    pairs = build_preference_pairs(
+        groups,
+        PairBuilderConfig(min_margin=0.15, allow_gold_fallback=False),
+        scorer=lambda *_args: 0.0,
+    )
+
+    assert pairs == []

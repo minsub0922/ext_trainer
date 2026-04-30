@@ -31,6 +31,7 @@ class PairBuilderConfig:
     min_margin: float = 0.15
     max_pairs_per_prompt: int = 1
     task_types: tuple[str, ...] = ("kv", "entity", "relation")
+    allow_gold_fallback: bool = True
 
 
 def _primary_score(metrics_obj, task_type: str) -> float:
@@ -42,15 +43,30 @@ def _primary_score(metrics_obj, task_type: str) -> float:
     if task_type == "relation":
         return float(metrics_obj.relation.f1)
     # fallback: macro over whatever scored > 0
-    scores = [metrics_obj.kv.f1, metrics_obj.entity.f1, metrics_obj.relation.f1]
+    scores = [
+        task.f1
+        for task in (metrics_obj.kv, metrics_obj.entity, metrics_obj.relation)
+        if task is not None
+    ]
     non_zero = [s for s in scores if s > 0]
     return float(sum(non_zero) / len(non_zero)) if non_zero else 0.0
 
 
 def _score_sample(prediction: str, gold: dict, task_type: str) -> float:
     """Score a single (prediction, gold) pair and return the primary F1."""
-    m = evaluate([prediction], [gold], task_types=[task_type])
+    m = evaluate([prediction], [gold], task_types=[task_type], log_summary=False)
     return _primary_score(m, task_type)
+
+
+def _gold_answer_text(gold: dict) -> str:
+    """Serialize the canonical answer as a strict JSON completion."""
+    answer = gold.get("answer") or {}
+    normalized = {
+        "kv": answer.get("kv") or {},
+        "entity": answer.get("entity") or [],
+        "relation": answer.get("relation") or [],
+    }
+    return json.dumps(normalized, ensure_ascii=False)
 
 
 def build_preference_pairs(
@@ -80,6 +96,7 @@ def build_preference_pairs(
             continue
         gold = group["gold"]
         task_type = group.get("task_type") or "kv"
+        start_len = len(pairs)
         scored = [(s, scorer(s, gold, task_type)) for s in samples]
         scored.sort(key=lambda t: t[1], reverse=True)
 
@@ -100,6 +117,31 @@ def build_preference_pairs(
                     "margin": r_c - r_r,
                 },
             })
+
+        if len(pairs) > start_len:
+            continue
+
+        if not cfg.allow_gold_fallback:
+            continue
+
+        gold_answer = _gold_answer_text(gold)
+        gold_score = scorer(gold_answer, gold, task_type)
+        rejected, rejected_score = scored[-1]
+        margin = gold_score - rejected_score
+        if margin < cfg.min_margin:
+            continue
+        pairs.append({
+            "instruction": group["instruction"],
+            "input": group.get("input", ""),
+            "output": [gold_answer, rejected],
+            "metadata": {
+                "task_type": task_type,
+                "reward_chosen": gold_score,
+                "reward_rejected": rejected_score,
+                "margin": margin,
+                "fallback": "gold_answer",
+            },
+        })
     return pairs
 
 

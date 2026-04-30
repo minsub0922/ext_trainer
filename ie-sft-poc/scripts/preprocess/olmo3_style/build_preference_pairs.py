@@ -139,6 +139,14 @@ def main() -> None:
     ap.add_argument("--max-new-tokens", type=int, default=512)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--min-margin", type=float, default=0.15)
+    ap.add_argument(
+        "--no-gold-fallback",
+        action="store_true",
+        help=(
+            "disable fallback pairs that use the canonical gold answer as "
+            "chosen when model samples do not produce a margin"
+        ),
+    )
     ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp16", "fp32"])
     ap.add_argument(
         "--register-only",
@@ -229,31 +237,48 @@ def main() -> None:
             samples = _sample_k(model, tok, prompt, args.k, args.temperature,
                                 args.max_new_tokens, device)
             gold = _canonical_gold(rec)
+            raw_task = rec.get("task_type") or rec.get("task")
+            task_type = (
+                raw_task
+                if raw_task in {"kv", "entity", "relation"}
+                else _primary_task_type(gold)
+            )
             yield {
                 "prompt": prompt,
                 "instruction": prompt,
                 "input": "",
                 "gold": gold,
-                "task_type": rec.get("task_type") or rec.get("task") or _primary_task_type(gold),
+                "task_type": task_type,
                 "samples": samples,
             }
             n += 1
 
-    cfg = PairBuilderConfig(min_margin=args.min_margin)
+    cfg = PairBuilderConfig(
+        min_margin=args.min_margin,
+        allow_gold_fallback=not args.no_gold_fallback,
+    )
     pairs = build_preference_pairs(gen_group(), cfg)
     if not pairs:
         if out.exists():
             out.unlink()
         raise RuntimeError(
             "No preference pairs were generated. Check that the input split is "
-            "canonical with non-empty answer/task_types, or retry with a lower "
-            "--min-margin after inspecting model samples."
+            "canonical with non-empty answer/task_types, retry with a lower "
+            "--min-margin, or omit --no-gold-fallback after inspecting model "
+            "samples."
         )
     out = write_pairs_jsonl(pairs, args.output)
 
     # Register in dataset_info.json
     register_dataset()
-    print(f"wrote {len(pairs)} pairs → {out}")
+    fallback_pairs = sum(
+        1 for pair in pairs
+        if (pair.get("metadata") or {}).get("fallback") == "gold_answer"
+    )
+    if fallback_pairs:
+        print(f"wrote {len(pairs)} pairs → {out} ({fallback_pairs} gold-fallback)")
+    else:
+        print(f"wrote {len(pairs)} pairs → {out}")
 
 
 if __name__ == "__main__":

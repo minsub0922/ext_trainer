@@ -752,6 +752,7 @@ def evaluate(
     predictions: list[str],
     gold_records: list[dict[str, Any]],
     task_types: list[str] | None = None,
+    log_summary: bool = True,
 ) -> IEMetrics:
     """Compute IE metrics for a batch of predictions against gold records.
 
@@ -761,6 +762,7 @@ def evaluate(
         task_types: which tasks to score. Defaults to the union of
             task_types actually present across gold. Values: ``"kv"``,
             ``"entity"``, ``"relation"``.
+        log_summary: whether to emit the aggregate INFO log line.
 
     Returns:
         An ``IEMetrics`` summary. Only the requested tasks are populated.
@@ -811,15 +813,16 @@ def evaluate(
             pred_rels, gold_rels, require_types=True
         )
 
-    logger.info(
-        "Eval summary: n=%d parse_failures=%d "
-        "kv_f1=%.4f entity_f1=%.4f relation_f1=%.4f",
-        n,
-        parse_failures,
-        metrics.kv.f1 if metrics.kv else -1,
-        metrics.entity.f1 if metrics.entity else -1,
-        metrics.relation.f1 if metrics.relation else -1,
-    )
+    if log_summary:
+        logger.info(
+            "Eval summary: n=%d parse_failures=%d "
+            "kv_f1=%.4f entity_f1=%.4f relation_f1=%.4f",
+            n,
+            parse_failures,
+            metrics.kv.f1 if metrics.kv else -1,
+            metrics.entity.f1 if metrics.entity else -1,
+            metrics.relation.f1 if metrics.relation else -1,
+        )
     return metrics
 
 
