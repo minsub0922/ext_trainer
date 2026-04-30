@@ -285,6 +285,9 @@ bash scripts/train/run_sft_qwen35_full.sh     # Qwen3.5-0.8B full SFT
 # Override: pick a specific config or pin NPROC.
 CONFIG=configs/sft/qwen3_full_sft_ds.yaml NPROC=4 \
   bash scripts/train/run_sft_qwen3_full.sh
+
+# Resume Qwen3 full SFT from the highest checkpoint-* step.
+NPROC=4 bash scripts/train/run_sft_qwen3_full_keep_going.sh
 ```
 
 H100 / Hopper: every SFT YAML ships `flash_attn: fa2`. For Hopper-tuned
