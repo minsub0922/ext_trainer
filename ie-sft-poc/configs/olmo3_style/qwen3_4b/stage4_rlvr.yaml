@@ -1,0 +1,36 @@
+### OLMo3-style stage 4 RLVR for Qwen3-4B.
+
+algorithm: grpo
+
+model_path: outputs/olmo3_style/qwen3-4b/stage3_dpo
+ref_model_path: outputs/olmo3_style/qwen3-4b/stage3_dpo
+tokenizer_template: qwen
+
+prompts_file: data/processed/olmo3_style/rlvr_prompts.jsonl
+output_dir: outputs/olmo3_style/qwen3-4b/stage4_rlvr
+
+num_generations_per_prompt: 4
+max_new_tokens: 512
+temperature: 0.9
+top_p: 0.95
+prompt_batch_size: 2
+
+learning_rate: 5.0e-7
+kl_coef: 0.04
+clip_range: 0.2
+num_epochs: 1
+total_steps: 500
+
+reward_mode: auto
+reward_normalize: groupwise
+parse_failure_penalty: -0.1
+
+dtype: bf16
+attn_impl: auto
+gradient_checkpointing: true
+
+logging_steps: 5
+save_steps: 100
+report_to: tensorboard
+
+seed: 42

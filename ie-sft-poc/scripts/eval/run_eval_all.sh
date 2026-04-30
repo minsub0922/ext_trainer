@@ -29,10 +29,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-MODELS="${MODELS:-qwen3 qwen3.5}"
+MODELS="${MODELS:-qwen3 qwen3-4b qwen3.5}"
 VARIANTS="${VARIANTS:-lora full}"
-BASELINES="${BASELINES:-qwen3-0.6b-base qwen3.5-0.8b-base qwen3-8b qwen3.5-4b qwen3.5-9b}"
-OLMO3_MODELS="${OLMO3_MODELS:-qwen3 qwen3.5}"
+BASELINES="${BASELINES:-qwen3-0.6b-base qwen3-4b-base qwen3.5-0.8b-base qwen3-8b qwen3.5-4b qwen3.5-9b}"
+OLMO3_MODELS="${OLMO3_MODELS:-qwen3 qwen3-4b qwen3.5}"
 OLMO3_STAGES="${OLMO3_STAGES:-olmo3-stage2 olmo3-stage3 olmo3-stage4}"  # skip stage1: pt-only, no chat template
 MODES="${MODES:-unified}"
 SKIP_BASELINES="${SKIP_BASELINES:-0}"
@@ -47,8 +47,9 @@ declare -a FAILED=()
 if [[ "$SKIP_FINETUNED" != "1" ]]; then
   for model in $MODELS; do
     case "$model" in
-      qwen3)   TAG="qwen3-0.6b"   ;;
-      qwen3.5) TAG="qwen3.5-0.8b" ;;
+      qwen3)    TAG="qwen3-0.6b"   ;;
+      qwen3-4b) TAG="qwen3-4b"     ;;
+      qwen3.5)  TAG="qwen3.5-0.8b" ;;
       *) echo "bad model $model"; continue ;;
     esac
 
@@ -99,8 +100,9 @@ fi
 if [[ "$SKIP_OLMO3" != "1" ]]; then
   for model in $OLMO3_MODELS; do
     case "$model" in
-      qwen3)   TAG="qwen3-0.6b" ;;
-      qwen3.5) TAG="qwen3.5-0.8b" ;;
+      qwen3)    TAG="qwen3-0.6b"   ;;
+      qwen3-4b) TAG="qwen3-4b"     ;;
+      qwen3.5)  TAG="qwen3.5-0.8b" ;;
       *) echo "bad olmo3 model $model"; continue ;;
     esac
 

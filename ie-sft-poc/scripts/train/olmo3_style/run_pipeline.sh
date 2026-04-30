@@ -27,8 +27,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$MODEL" in
-  qwen3)   TAG="qwen3-0.6b" ;;
-  qwen3.5) TAG="qwen3.5-0.8b" ;;
+  qwen3)    TAG="qwen3-0.6b"   ;;
+  qwen3-4b) TAG="qwen3-4b"     ;;
+  qwen3.5)  TAG="qwen3.5-0.8b" ;;
   *) echo "ERROR: bad MODEL=$MODEL" >&2; exit 2 ;;
 esac
 

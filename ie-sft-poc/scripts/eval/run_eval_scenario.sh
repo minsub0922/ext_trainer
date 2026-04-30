@@ -66,6 +66,7 @@ else
   case "$MODEL" in
     # --- small fine-tuned models ---
     qwen3)            BASE="Qwen/Qwen3-0.6B";           TAG="qwen3-0.6b"       ;;
+    qwen3-4b)         BASE="Qwen/Qwen3-4B";             TAG="qwen3-4b"         ;;
     qwen3.5)          BASE="Qwen/Qwen3.5-0.8B";         TAG="qwen3.5-0.8b"     ;;
     # --- Qwen3 baseline models (post-trained / instruct) ---
     qwen3-1.7b)       BASE="Qwen/Qwen3-1.7B";           TAG="qwen3-1.7b"       ;;
@@ -80,6 +81,7 @@ else
     qwen3.5-27b)      BASE="Qwen/Qwen3.5-27B";          TAG="qwen3.5-27b"      ;;
     # --- Base (pretrain-only) variants ---
     qwen3-0.6b-base)  BASE="Qwen/Qwen3-0.6B";           TAG="qwen3-0.6b-base"  ;;
+    qwen3-4b-base)    BASE="Qwen/Qwen3-4B";             TAG="qwen3-4b-base"    ;;
     qwen3-8b-base)    BASE="Qwen/Qwen3-8B-Base";        TAG="qwen3-8b-base"    ;;
     qwen3.5-0.8b-base) BASE="Qwen/Qwen3.5-0.8B";       TAG="qwen3.5-0.8b-base" ;;
     qwen3.5-9b-base)  BASE="Qwen/Qwen3.5-9B-Base";      TAG="qwen3.5-9b-base"  ;;
@@ -96,7 +98,7 @@ fi
 # ---- validate variant for larger models -------------------------------------
 # Only the small fine-tuned models (qwen3, qwen3.5) support lora/full/olmo3 variants.
 case "$MODEL" in
-  qwen3|qwen3.5) ;;  # fine-tuned small models: all variants OK
+  qwen3|qwen3-4b|qwen3.5) ;;  # fine-tuned models: all variants OK
   *)
     if [[ "$VARIANT" != "base" ]]; then
       echo "ERROR: --model $MODEL only supports --variant base (no fine-tuned checkpoint)" >&2

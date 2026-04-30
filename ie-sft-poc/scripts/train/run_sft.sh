@@ -57,6 +57,8 @@ if [[ -z "$CONFIG" ]]; then
   case "${MODEL}/${VARIANT}" in
     qwen3/lora)     CONFIG="configs/sft/qwen3_lora_sft.yaml" ;;
     qwen3/full)     CONFIG="configs/sft/qwen3_full_sft_ds.yaml" ;;
+    qwen3-4b/lora)  CONFIG="configs/sft/qwen3_4b_lora_sft.yaml" ;;
+    qwen3-4b/full)  CONFIG="configs/sft/qwen3_4b_full_sft_ds.yaml" ;;
     qwen3.5/lora)   CONFIG="configs/sft/qwen3_5_lora_sft.yaml" ;;
     qwen3.5/full)   CONFIG="configs/sft/qwen3_5_full_sft_ds.yaml" ;;
     olmo3/lora|olmo3/*)  CONFIG="configs/sft/olmo3_poc_sft.yaml" ;;

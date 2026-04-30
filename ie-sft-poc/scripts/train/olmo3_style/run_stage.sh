@@ -37,9 +37,10 @@ done
 
 # ---- resolve config ---------------------------------------------------------
 case "$MODEL" in
-  qwen3)   MODEL_DIR="qwen3" ;;
-  qwen3.5) MODEL_DIR="qwen3_5" ;;
-  *) echo "ERROR: unknown MODEL=$MODEL (use qwen3 or qwen3.5)" >&2; exit 2 ;;
+  qwen3)    MODEL_DIR="qwen3" ;;
+  qwen3-4b) MODEL_DIR="qwen3_4b" ;;
+  qwen3.5)  MODEL_DIR="qwen3_5" ;;
+  *) echo "ERROR: unknown MODEL=$MODEL (use qwen3, qwen3-4b, or qwen3.5)" >&2; exit 2 ;;
 esac
 
 case "$STAGE" in

@@ -100,6 +100,18 @@ _QWEN3_0_6B = ModelConfig(
     notes="Qwen3 0.6B base model optimized for IE tasks",
 )
 
+_QWEN3_4B = ModelConfig(
+    name="qwen3-4b",
+    family="qwen3",
+    model_name_or_path="Qwen/Qwen3-4B",
+    template="qwen",
+    default_lora_target="all",
+    default_max_length=2048,
+    bf16=True,
+    recommended_batch_size=2,
+    notes="Qwen3 4B model for IE tasks — mid-size quality/cost tradeoff",
+)
+
 _QWEN3_5_0_8B = ModelConfig(
     name="qwen3.5-0.8b",
     family="qwen3",
@@ -126,6 +138,7 @@ _OLMO3_1B_POC = ModelConfig(
 
 # Register pre-defined models
 register_model(_QWEN3_0_6B)
+register_model(_QWEN3_4B)
 register_model(_QWEN3_5_0_8B)
 register_model(_OLMO3_1B_POC)
 

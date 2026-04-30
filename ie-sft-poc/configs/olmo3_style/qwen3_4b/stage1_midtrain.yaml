@@ -1,0 +1,45 @@
+### OLMo3-style mid-training (stage 1) for Qwen3-4B.
+### See configs/olmo3_style/qwen3/stage1_midtrain.yaml for recipe notes.
+
+model_name_or_path: Qwen/Qwen3-4B
+template: qwen
+
+stage: pt
+do_train: true
+finetuning_type: full
+
+deepspeed: configs/sft/deepspeed_z3.json
+
+dataset: ie_midtrain
+dataset_dir: data/processed/olmo3_style
+cutoff_len: 4096
+preprocessing_num_workers: 4
+packing: true
+
+output_dir: outputs/olmo3_style/qwen3-4b/stage1_midtrain
+logging_steps: 20
+save_steps: 1000
+save_total_limit: 2
+
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 16
+learning_rate: 3.0e-6
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.02
+max_grad_norm: 1.0
+weight_decay: 0.0
+
+bf16: true
+fp16: false
+flash_attn: auto
+
+val_size: 0.02
+eval_strategy: steps
+eval_steps: 500
+
+ddp_timeout: 180000000
+seed: 42
+report_to:
+  - tensorboard
